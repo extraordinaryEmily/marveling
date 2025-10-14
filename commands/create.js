@@ -1,5 +1,47 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createEvent, addInvited, addAttendee, removeAttendee } = require('../utils/eventManager');
+
+/**
+ * Validates if a string contains a legitimate date/time format
+ * @param {string} str - The string to validate
+ * @returns {boolean} - True if valid date/time format
+ */
+function isValidDateTime(str) {
+  if (!str || str.length < 4) return false;
+  
+  const lower = str.toLowerCase();
+  
+  // Check for day of week patterns
+  const daysOfWeek = ['monday', 'mon', 'tuesday', 'tue', 'tues', 'wednesday', 'wed', 'thursday', 'thu', 'thurs', 
+                      'friday', 'fri', 'saturday', 'sat', 'sunday', 'sun'];
+  const hasDayOfWeek = daysOfWeek.some(day => lower.includes(day));
+  
+  // Check for month patterns
+  const months = ['january', 'jan', 'february', 'feb', 'march', 'mar', 'april', 'apr', 'may', 
+                  'june', 'jun', 'july', 'jul', 'august', 'aug', 'september', 'sept', 'sep', 
+                  'october', 'oct', 'november', 'nov', 'december', 'dec'];
+  const hasMonth = months.some(month => lower.includes(month));
+  
+  // Check for date patterns (MM/DD, DD/MM, numbers with slashes or dashes)
+  const hasDatePattern = /\d{1,2}[\/\-]\d{1,2}/.test(str);
+  
+  // Check for time patterns (e.g., 8PM, 8:30pm, 8:30 PM, 20:00, 1am, 12:45AM)
+  const hasTimePattern = /\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)|^.*\d{1,2}:\d{2}.*$/.test(str);
+  
+  // Check for "today", "tomorrow", "tonight"
+  const hasRelativeDay = /\b(today|tomorrow|tonight|tmr|tmrw)\b/i.test(lower);
+  
+  // Must have at least one date indicator (day, month, date pattern, or relative day)
+  const hasDateIndicator = hasDayOfWeek || hasMonth || hasDatePattern || hasRelativeDay;
+  
+  // Must have a time pattern
+  if (!hasTimePattern) return false;
+  
+  // Must have a date indicator
+  if (!hasDateIndicator) return false;
+  
+  return true;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,21 +52,37 @@ module.exports = {
     const role = interaction.guild.roles.cache.find(r => r.name === "rivaling");
     const rolePing = role ? `<@&${role.id}>` : '@rivaling';
 
-    // Send the prompt as a regular message
-    const prompt = await interaction.channel.send(
-      `${interaction.user} — Do you want to **play now** or **plan a game night**?\n🕹 = Play Now | 📅 = Plan Game Night`
-    );
+    // Send the prompt as an ephemeral message with buttons
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId('play_now')
+          .setLabel('Play Now')
+          .setEmoji('🕹')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId('plan_game_night')
+          .setLabel('Plan Game Night')
+          .setEmoji('📅')
+          .setStyle(ButtonStyle.Secondary)
+      );
 
-    await prompt.react('🕹');
-    await prompt.react('📅');
+    await interaction.reply({
+      content: 'Play now or later?',
+      components: [row],
+      ephemeral: true
+    });
 
-    const filter = (reaction, user) =>
-      ['🕹', '📅'].includes(reaction.emoji.name) && user.id === interaction.user.id;
+    const collector = interaction.channel.createMessageComponentCollector({
+      filter: i => i.user.id === interaction.user.id,
+      max: 1,
+      time: 20000
+    });
 
-    const collector = prompt.createReactionCollector({ filter, max: 1, time: 20000 });
+    collector.on('collect', async buttonInteraction => {
+      await buttonInteraction.deferUpdate();
 
-    collector.on('collect', async reaction => {
-      if (reaction.emoji.name === '🕹') {
+      if (buttonInteraction.customId === 'play_now') {
         // ===== PLAY NOW FLOW =====
         const id = createEvent(interaction.user.id, 'now');
 
@@ -77,18 +135,40 @@ module.exports = {
           if (reaction.emoji.name === '✅') removeAttendee(id, user.id);
         });
 
-      } else if (reaction.emoji.name === '📅') {
+      } else if (buttonInteraction.customId === 'plan_game_night') {
         // ===== PLAN GAME NIGHT FLOW =====
-        const ask = await interaction.channel.send(`${interaction.user} — When would you like to play? (e.g. Friday 8PM)`);
+        await interaction.followUp({
+          content: 'When would you like to play? (e.g., **Friday 8PM**, **10/18 5PM**, **Oct 19th 3pm**, **Monday 1am**)\nPlease respond in the channel with a date and time.',
+          ephemeral: true
+        });
 
         const msgCollector = interaction.channel.createMessageCollector({
           filter: m => m.author.id === interaction.user.id,
-          max: 1,
-          time: 30000,
+          time: 60000,
         });
 
+        let validResponseReceived = false;
+
         msgCollector.on('collect', async m => {
-          const time = m.content;
+          if (validResponseReceived) return;
+
+          const time = m.content.trim();
+          
+          // Validate the time format
+          if (!isValidDateTime(time)) {
+            await interaction.followUp({
+              content: `❌ "${time}" doesn't look like a valid date/time. Please provide a proper date and time (e.g., **Friday 8PM**, **10/18 5PM**, **Oct 19th 3pm**, **Monday 1am**).`,
+              ephemeral: true
+            });
+            return;
+          }
+
+          validResponseReceived = true;
+          msgCollector.stop();
+
+          // Delete the user's message for privacy
+          await m.delete().catch(() => {});
+
           const id = createEvent(interaction.user.id, 'planned', time);
 
           addInvited(id, interaction.user.id);
@@ -99,7 +179,7 @@ module.exports = {
             .setTitle('📅 Marvel Rivals Game Night')
             .addFields(
               { name: 'Event ID', value: `#${id}` },
-              { name: 'RSVP', value: '✅ Available | 🤔 Maybe | ❌ Can’t make it | 🔁 Suggest new time' }
+              { name: 'RSVP', value: '✅ Available | 🤔 Maybe | ❌ Can\'t make it | 🔁 Suggest new time' }
             )
             .setTimestamp();
 
@@ -136,16 +216,22 @@ module.exports = {
             if (reaction.emoji.name === '✅') removeAttendee(id, user.id);
           });
         });
+
+        msgCollector.on('end', () => {
+          if (!validResponseReceived) {
+            interaction.followUp({
+              content: '⏰ Time expired. Please use `/create` again to plan a game night.',
+              ephemeral: true
+            });
+          }
+        });
       }
     });
 
     collector.on('end', collected => {
       if (collected.size === 0) {
-        interaction.channel.send('⏰ No response. Command cancelled.');
+        interaction.editReply({ content: '⏰ No response. Command cancelled.', components: [] });
       }
     });
-
-    // Confirm command execution
-    await interaction.reply({ content: '✅ Event creation prompt sent!', ephemeral: true });
   },
 };
