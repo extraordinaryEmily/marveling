@@ -37,7 +37,7 @@ module.exports = {
     const reply =
       `**🎮 Event #${id} — Guest Overview**\n\n` +
       `👥 **Invited:** ${invited}\n` +
-      `✅ **RSVP’d (Available):** ${rsvp}\n` +
+      `✅ **RSVP’d:** ${rsvp}\n` +
       `🌐 **Outside Guests:** ${outsideGuests}`;
 
     await interaction.reply({ content: reply, ephemeral: true });

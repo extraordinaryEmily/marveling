@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getEvent, addAttendee, addInvited } = require('../utils/eventManager');
+const { getEvent, addAttendee, addInvited, addGuest } = require('../utils/eventManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -38,7 +38,7 @@ module.exports = {
         return interaction.reply({ content: `⚠️ Cannot invite a role directly.`, ephemeral: true });
       }
 
-      addAttendee(id, mention.id);
+      addInvited(id, mention.id);
       await interaction.reply(`📩 Invited ${mention} to event #${id}!`);
       return;
     }
@@ -54,12 +54,19 @@ module.exports = {
         unique: true,
       });
 
-      addInvited(id, `${interaction.user.username} (${guestFlag})`);
+      addGuest(id, `${interaction.user.username} (${guestFlag})`);
 
+      // Public announcement
       await interaction.reply(
-        `🌐 ${interaction.user.username} invited **${guestFlag}** guest(s) to event #${id}.\n` +
-        `Here’s their invite link (valid 1 hour):\n${invite.url}`
+        `🌐 ${interaction.user.username} invited **${guestFlag}** guest(s) to event #${id}.`
       );
+
+      // Private follow-up with invite link
+      await interaction.followUp({
+        content: `Here's their invite link (valid 1 hour):\n${invite.url}`,
+        ephemeral: true
+      });
+      
       return;
     }
 
