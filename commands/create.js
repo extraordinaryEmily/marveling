@@ -10,8 +10,12 @@ const {
   deleteEvent,
   addInvited,
   addAttendee,
-  removeAttendee
+  removeAttendee,
+  setReminder,
+  cancelReminder,
+  getEvent
 } = require('../utils/eventManager');
+const chrono = require('chrono-node');
 
 /**
  * Validates if a string contains a legitimate date/time format.
@@ -34,7 +38,167 @@ function isValidDateTime(str) {
 }
 
 /**
- * Adds RSVP collectors for reactions and handles reschedule prompts.
+ * Validates and adjusts event time. 
+ * - If user explicitly says "today"/"tonight" and time is past → reject
+ * - If time is in the past (other days) → automatically adds 7 days
+ * Returns { eventTime, debugInfo } or { eventTime: null, debugInfo } if invalid.
+ */
+function validateAndAdjustEventTime(timeString) {
+  const now = new Date();
+  const debugInfo = {
+    input: timeString,
+    currentTime: now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' })
+  };
+  
+  const parsed = chrono.parse(timeString, new Date(), { timezone: 'PST' });
+  if (!parsed || parsed.length === 0) {
+    debugInfo.error = 'Failed to parse time';
+    return { eventTime: null, debugInfo };
+  }
+  
+  let eventTime = parsed[0].start.date();
+  debugInfo.parsedTime = eventTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' });
+  debugInfo.isInPast = eventTime <= now;
+  
+  // Check if user explicitly said "today" or "tonight"
+  const lowerInput = timeString.toLowerCase();
+  const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
+  debugInfo.explicitToday = explicitToday;
+  
+  // Validate that parsed day matches input (chrono sometimes fails on abbreviations like "tues")
+  const dayNames = {
+    'sunday': 0, 'sun': 0,
+    'monday': 1, 'mon': 1,
+    'tuesday': 2, 'tue': 2, 'tues': 2,
+    'wednesday': 3, 'wed': 3,
+    'thursday': 4, 'thu': 4, 'thurs': 4,
+    'friday': 5, 'fri': 5,
+    'saturday': 6, 'sat': 6
+  };
+  
+  // Check if user specified a day name
+  const inputDay = Object.keys(dayNames).find(day => lowerInput.includes(day));
+  if (inputDay && !explicitToday) {
+    const expectedDayNum = dayNames[inputDay];
+    const parsedDayNum = eventTime.getDay();
+    
+    debugInfo.inputDayName = inputDay;
+    debugInfo.expectedDayNum = expectedDayNum;
+    debugInfo.parsedDayNum = parsedDayNum;
+    
+    // If parsed day doesn't match input day, manually set it
+    if (parsedDayNum !== expectedDayNum) {
+      debugInfo.dayMismatch = true;
+      
+      // Calculate days until the target day
+      let daysUntil = expectedDayNum - parsedDayNum;
+      if (daysUntil <= 0) daysUntil += 7; // Go to next week if day already passed
+      
+      eventTime = new Date(eventTime.getTime() + daysUntil * 24 * 60 * 60 * 1000);
+      debugInfo.correctedTime = eventTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' });
+      debugInfo.parsedTime = debugInfo.correctedTime; // Update parsedTime to show corrected time
+    }
+  }
+  
+  // Re-check if time is in the past after correction
+  debugInfo.isInPast = eventTime <= now;
+  
+  // If parsed time is in the past
+  if (eventTime <= now) {
+    // Check if it's today
+    const eventDate = new Date(eventTime);
+    const nowDate = new Date(now);
+    const isSameDay = eventDate.getFullYear() === nowDate.getFullYear() &&
+                      eventDate.getMonth() === nowDate.getMonth() &&
+                      eventDate.getDate() === nowDate.getDate();
+    
+    debugInfo.isSameDay = isSameDay;
+    
+    // If user explicitly said "today" or "tonight" and time is past, reject it
+    if (explicitToday && eventTime <= now) {
+      debugInfo.action = 'Rejected: User said "today" but time has passed';
+      return { eventTime: null, debugInfo };
+    }
+    
+    // Otherwise, add 7 days (user said a day name, not "today")
+    eventTime = new Date(eventTime.getTime() + 7 * 24 * 60 * 60 * 1000);
+    debugInfo.action = isSameDay ? 'Added 7 days (same day, past time → next week)' : 'Added 7 days (past day → next week)';
+    debugInfo.adjustedTime = eventTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' });
+    
+    // If still in the past after adding a week, return null
+    if (eventTime <= now) {
+      debugInfo.error = 'Still in past after adding 7 days';
+      return { eventTime: null, debugInfo };
+    }
+  } else {
+    debugInfo.action = 'No adjustment needed (future time)';
+  }
+  
+  return { eventTime, debugInfo };
+}
+
+/**
+ * Schedules a reminder 45 minutes before the event time.
+ * Uses PST timezone for parsing.
+ */
+function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
+  // Parse the time string with PST timezone context
+  const parsed = chrono.parse(timeString, new Date(), { timezone: 'PST' });
+  
+  if (!parsed || parsed.length === 0) return false;
+  
+  const eventTime = parsed[0].start.date();
+  const reminderTime = new Date(eventTime.getTime() - 45 * 60 * 1000); // 45 minutes before
+  const now = new Date();
+  
+  // Only schedule if reminder time is in the future
+  if (reminderTime <= now) return false;
+  
+  const delayMs = reminderTime.getTime() - now.getTime();
+  
+  // Randomized reminder messages
+  const reminderMessages = [
+    { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
+    { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
+    { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **45 minutes!**' },
+    { title: '🔥 Almost time!', desc: 'Game night kicks off in **45 minutes!**' },
+    { title: '💥 Heads up!', desc: "We're playing in **45 minutes!**" },
+    { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
+    { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
+  ];
+  
+  // Schedule the reminder
+  const timeoutId = setTimeout(async () => {
+    const event = getEvent(eventId);
+    if (!event) return;
+    
+    const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
+    const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
+    
+    const embed = new EmbedBuilder()
+      .setColor(0xffa500)
+      .setTitle(randomMsg.title)
+      .setDescription(randomMsg.desc)
+      .setImage('https://giffiles.alphacoders.com/223/223284.gif')
+      .addFields(
+        { name: 'Event ID', value: `#${eventId}` }
+      );
+    
+    await channel.send({
+      content: attendeeMentions ? `⏰ ${attendeeMentions}` : `⏰ ${rolePing}`,
+      embeds: [embed],
+      allowedMentions: { parse: ['users', 'roles'] }
+    });
+  }, delayMs);
+  
+  setReminder(eventId, timeoutId, channel.id, null);
+  return true;
+}
+
+/**
+ * Sets up RSVP reaction collectors and handles automatic reschedule prompts.
+ * For planned events: ✅ ✅ Maybe ❌ Can't make it 🔁 Reschedule
+ * For play now events: ✅ ❌
  */
 function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, time) {
   const isPlanned = eventType === 'planned';
@@ -94,10 +258,24 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
           return;
         }
 
-        // Handle invalid time
+        // Validate and adjust time
         if (!isValidDateTime(input)) {
           await interaction.followUp({
-            content: `❌ "${m.content.trim()}" is not a valid date/time. Try again or type "no" to cancel.`,
+            content: `❌ "${m.content.trim()}" is not a valid date/time. Try "Oct 18 5PM", or type "no" to cancel.`,
+            ephemeral: true
+          });
+          return;
+        }
+        
+        const result = validateAndAdjustEventTime(input);
+        const debugText = `\n\n🐛 **Debug:**\n\`\`\`\n${JSON.stringify(result.debugInfo, null, 2)}\n\`\`\``;
+        
+        if (!result.eventTime) {
+          const errorMsg = result.debugInfo.explicitToday 
+            ? `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm", or type "no" to cancel. (All times are PST)`
+            : `❌ Unable to schedule for that time. Try a different time or type "no" to cancel. (All times are PST)`;
+          await interaction.followUp({
+            content: `${errorMsg}${debugText}`,
             ephemeral: true
           });
           return;
@@ -107,7 +285,8 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         await m.delete().catch(() => {});
         msgCollector.stop('reschedule');
 
-        // Delete old event and message
+        // Cancel old reminder and delete old event and message
+        cancelReminder(id);
         deleteEvent(id);
         await msg.delete().catch(() => {});
 
@@ -122,12 +301,11 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
           .setTitle('🔁 Marvel Rivals Game Night (Rescheduled)')
           .addFields(
             { name: 'Event ID', value: `#${newId}` },
-            { name: 'RSVP', value: '✅ Available | 🤔 Maybe | ❌ Can’t make it | 🔁 Reschedule' }
-          )
-          .setTimestamp();
+            { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+          );
 
         const newMsg = await interaction.channel.send({
-          content: `🔁 <@${interaction.user.id}> **rescheduled!**\n🗓 **Time:** ${input}\n${rolePing}`,
+          content: `🔁 <@${interaction.user.id}> **rescheduled!**\n🗓 **Time:** ${input} (PST)\n${rolePing}`,
           embeds: [newEmbed],
           allowedMentions: { parse: ['roles'] }
         });
@@ -137,6 +315,9 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
 
         // Start RSVP collector on new message
         setupRSVPCollector(newMsg, interaction, rolePing, newId, role, 'planned', input);
+        
+        // Schedule new reminder
+        scheduleReminder(newId, input, interaction.channel, rolePing, interaction.user);
 
       });
 
@@ -166,6 +347,7 @@ module.exports = {
     const role = interaction.guild.roles.cache.find(r => r.name === 'rivaling');
     const rolePing = role ? `<@&${role.id}>` : '@rivaling';
 
+    // Show button selection: Play Now or Plan Game Night
     const buttons = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('play_now').setLabel('Play Now').setEmoji('🕹').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('plan_game_night').setLabel('Plan Game Night').setEmoji('📅').setStyle(ButtonStyle.Secondary)
@@ -187,7 +369,7 @@ module.exports = {
       // ===============================
       if (btn.customId === 'plan_game_night') {
         await interaction.followUp({
-          content: 'When do you want to play?',
+          content: 'When do you want to play?\n💡 (All times are PST)',
           ephemeral: true
         });
 
@@ -198,13 +380,36 @@ module.exports = {
 
         msgCollector.on('collect', async m => {
           const time = m.content.trim();
+          
+          // Validate time format
           if (!isValidDateTime(time)) {
             await interaction.followUp({
-              content: `❌ "${time}" doesn’t look valid. Try "Friday 8PM" or "10/18 5PM".`,
+              content: `❌ "${time}" doesn't look valid. Try "today 5PM", "Friday 8PM" or "10/18 5PM".`,
               ephemeral: true
             });
             return;
           }
+          
+          // Validate and adjust time (adds 7 days if time is in the past)
+          const result = validateAndAdjustEventTime(time);
+          const debugText = `\n\n🐛 **Debug:**\n\`\`\`\n${JSON.stringify(result.debugInfo, null, 2)}\n\`\`\``;
+          
+          if (!result.eventTime) {
+            const errorMsg = result.debugInfo.explicitToday 
+              ? `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm". (All times are PST)`
+              : `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
+            await interaction.followUp({
+              content: `${errorMsg}${debugText}`,
+              ephemeral: true
+            });
+            return;
+          }
+          
+          // Show debug info on success
+          await interaction.followUp({
+            content: `✅ Time validated!${debugText}`,
+            ephemeral: true
+          });
 
           msgCollector.stop();
           await m.delete().catch(() => {});
@@ -217,18 +422,20 @@ module.exports = {
             .setTitle('📅 Marvel Rivals Game Night')
             .addFields(
               { name: 'Event ID', value: `#${id}` },
-              { name: 'RSVP', value: '✅ Available | 🤔 Maybe | ❌ Can’t make it | 🔁 Reschedule' }
-            )
-            .setTimestamp();
+              { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+            );
 
           const msg = await interaction.channel.send({
-            content: `${rolePing} — ${interaction.user} is planning a game night!\n🗓 **Time:** ${time}`,
+            content: `${rolePing} — ${interaction.user} is planning a game night!\n🗓 **Time:** ${time} (PST)`,
             embeds: [embed],
             allowedMentions: { parse: ['roles'] }
           });
 
           for (const e of ['✅', '🤔', '❌', '🔁']) await msg.react(e);
           setupRSVPCollector(msg, interaction, rolePing, id, role, 'planned', time);
+          
+          // Schedule reminder (fires 45 minutes before event)
+          scheduleReminder(id, time, interaction.channel, rolePing, interaction.user);
         });
 
         msgCollector.on('end', c => {
@@ -249,15 +456,14 @@ module.exports = {
 
         const embed = new EmbedBuilder()
           .setColor(0x00aeff)
-          .setTitle('🕹 Marvel Rivals LFG')
+          .setTitle('⚡ Avengers assemble!')
+          .setImage('https://i.imgur.com/pMPmPef.gif')
           .addFields(
-            { name: 'Event ID', value: `#${id}` },
-            { name: 'RSVP', value: '✅ Available | ❌ Cannot join' }
-          )
-          .setTimestamp();
+            { name: 'Event ID', value: `#${id}` }
+          );
 
         const msg = await interaction.channel.send({
-          content: `${rolePing} — ${interaction.user} wants to play **right now!**\nReact if you’re available!`,
+          content: `${rolePing} — ${interaction.user} needs heroes! **Assemble NOW or react!**`,
           embeds: [embed],
           allowedMentions: { parse: ['roles'] }
         });
