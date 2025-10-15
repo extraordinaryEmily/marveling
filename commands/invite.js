@@ -1,23 +1,23 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getEvent, addAttendee, addInvited, addGuest } = require('../utils/eventManager');
+const { getEvent, addInvited, addGuest } = require('../utils/eventManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('invite')
-    .setDescription('Invite someone to a Marveling event')
+    .setDescription('Invite people to your Marvel Rivals game night')
     .addStringOption(option =>
       option.setName('id')
-        .setDescription('Event ID to invite them to (e.g. 1001)')
+        .setDescription('Event ID (e.g. 1001)')
         .setRequired(true)
     )
     .addMentionableOption(option =>
       option.setName('person')
-        .setDescription('Tag the person you want to invite (inside server)')
+        .setDescription('Tag a server member')
         .setRequired(false)
     )
     .addStringOption(option =>
       option.setName('guest')
-        .setDescription('Invite outside guests (e.g. +1, +2)')
+        .setDescription('Outside guests (e.g. +1, +2)')
         .setRequired(false)
     ),
 
@@ -29,47 +29,67 @@ module.exports = {
       return interaction.reply({ content: `❌ Event #${id} not found.`, ephemeral: true });
     }
 
-    const mention = interaction.options.getMentionable('person');
-    const guestFlag = interaction.options.getString('guest');
+    const person = interaction.options.getMentionable('person');
+    const guest = interaction.options.getString('guest');
 
-    // Inside server invite
-    if (mention) {
-      if (!mention.user) {
-        return interaction.reply({ content: `⚠️ Cannot invite a role directly.`, ephemeral: true });
+    if (person && guest) {
+      return interaction.reply({ 
+        content: `⚠️ Choose either **@person** OR **+guests**, not both.`, 
+        ephemeral: true 
+      });
+    }
+
+    if (!person && !guest) {
+      return interaction.reply({ 
+        content: `⚠️ Please tag a person or add guests (+1, +2).`, 
+        ephemeral: true 
+      });
+    }
+
+    // Server member invite
+    if (person) {
+      if (!person.user) {
+        return interaction.reply({ 
+          content: `⚠️ Cannot invite a role. Please tag a user.`, 
+          ephemeral: true 
+        });
       }
 
-      addInvited(id, mention.id);
-      await interaction.reply(`📩 Invited ${mention} to event #${id}!`);
-      return;
+      if (person.id === interaction.user.id) {
+        return interaction.reply({ 
+          content: `⚠️ You can't invite yourself!`, 
+          ephemeral: true 
+        });
+      }
+
+      addInvited(id, person.id);
+      return interaction.reply(`📩 Invited ${person} to event #${id}!`);
     }
 
-    // Outside guests (e.g. +1, +2)
-    if (guestFlag && /^\+\d+$/.test(guestFlag.trim())) {
-      const guestCount = parseInt(guestFlag.replace('+', ''), 10);
-
-      // Create invite link limited to this channel
-      const invite = await interaction.channel.createInvite({
-        maxAge: 3600, // valid 1 hour
-        maxUses: guestCount,
-        unique: true,
+    // Outside guest invite
+    if (!/^\+\d+$/.test(guest.trim())) {
+      return interaction.reply({ 
+        content: `⚠️ Invalid format. Use +1, +2, etc.`, 
+        ephemeral: true 
       });
-
-      addGuest(id, `${interaction.user.username} (${guestFlag})`);
-
-      // Public announcement
-      await interaction.reply(
-        `🌐 ${interaction.user.username} invited **${guestFlag}** guest(s) to event #${id}.`
-      );
-
-      // Private follow-up with invite link
-      await interaction.followUp({
-        content: `Here's their invite link (valid 1 hour):\n${invite.url}`,
-        ephemeral: true
-      });
-      
-      return;
     }
 
-    await interaction.reply({ content: `⚠️ Please tag a person or specify guest count (e.g. +1, +2).`, ephemeral: true });
+    const guestCount = parseInt(guest.replace('+', ''), 10);
+    const invite = await interaction.channel.createInvite({
+      maxAge: 3600,
+      maxUses: guestCount,
+      unique: true,
+    });
+
+    addGuest(id, `${interaction.user.username} (${guest})`);
+
+    await interaction.reply(
+      `🌐 ${interaction.user.username} invited **${guest}** guest(s) to event #${id}.`
+    );
+
+    return interaction.followUp({
+      content: `Here's the invite link (valid 1 hour):\n${invite.url}`,
+      ephemeral: true
+    });
   },
 };
