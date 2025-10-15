@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, MessageFlags } = require('discord.js');
 const { 
   getEvent, 
   setReminder, 
@@ -247,7 +247,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
           msgCollector.stop('cancel');
           await interaction.followUp({
             content: '🛑 Reschedule cancelled.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -256,7 +256,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         if (!isValidDateTime(input)) {
           await interaction.followUp({
             content: `❌ "${m.content.trim()}" is not a valid date/time. Try "Oct 18 5PM", or type "no" to cancel.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -269,7 +269,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
             : `❌ Unable to schedule for that time. Try a different time or type "no" to cancel. (All times are PST)`;
           await interaction.followUp({
             content: errorMsg,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
           return;
         }
@@ -318,7 +318,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         if (reason === 'time') {
           interaction.followUp({
             content: '⌛ Reschedule timed out.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
           });
         }
       });

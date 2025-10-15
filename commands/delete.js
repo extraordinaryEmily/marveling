@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { deleteEvent, getEvent, cancelReminder } = require('../utils/eventManager');
 
 module.exports = {
@@ -16,12 +16,12 @@ module.exports = {
     const event = getEvent(id);
 
     if (!event) {
-      return interaction.reply({ content: `❌ Event #${id} not found.`, ephemeral: true });
+      return interaction.reply({ content: `❌ Event #${id} not found.`, flags: MessageFlags.Ephemeral });
     }
 
     // Only creator (or admin) can delete
     if (interaction.user.id !== event.creatorId && !interaction.member.permissions.has('Administrator')) {
-      return interaction.reply({ content: `🚫 You're not allowed to delete this event.`, ephemeral: true });
+      return interaction.reply({ content: `🚫 You're not allowed to delete this event.`, flags: MessageFlags.Ephemeral });
     }
 
     // Cancel any scheduled reminders

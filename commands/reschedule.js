@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const {
   getEvent,
   deleteEvent,
@@ -26,7 +26,7 @@ module.exports = {
     if (!event) {
       return interaction.reply({ 
         content: `❌ Event #${eventId} not found.`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
@@ -34,7 +34,7 @@ module.exports = {
     if (event.type !== 'planned') {
       return interaction.reply({ 
         content: `❌ You can only reschedule planned game nights, not "Play Now" sessions.`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
@@ -42,14 +42,14 @@ module.exports = {
     if (interaction.user.id !== event.creatorId) {
       return interaction.reply({ 
         content: `🚫 Only the host can reschedule this event.`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
     // Prompt for new time
     await interaction.reply({
       content: '🗓 Reschedule Game Night\nWhat\'s the new time?',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
 
     const msgCollector = interaction.channel.createMessageCollector({
@@ -66,7 +66,7 @@ module.exports = {
         msgCollector.stop('cancel');
         await interaction.followUp({
           content: '🛑 Reschedule cancelled.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -75,7 +75,7 @@ module.exports = {
       if (!isValidDateTime(input)) {
         await interaction.followUp({
           content: `❌ "${input}" is not a valid date/time. Try "Oct 18 5PM" or "Friday 8PM".`,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -89,7 +89,7 @@ module.exports = {
           : `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
         await interaction.followUp({
           content: errorMsg,
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       }
@@ -139,7 +139,7 @@ module.exports = {
       if (reason === 'time') {
         interaction.followUp({ 
           content: '⏰ Timed out. Try `/reschedule` again.', 
-          ephemeral: true 
+          flags: MessageFlags.Ephemeral 
         });
       }
     });

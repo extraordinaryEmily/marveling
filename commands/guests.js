@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { getEvent } = require('../utils/eventManager');
 
 module.exports = {
@@ -16,7 +16,7 @@ module.exports = {
     const event = getEvent(id);
 
     if (!event) {
-      return interaction.reply({ content: `❌ Event #${id} not found.`, ephemeral: true });
+      return interaction.reply({ content: `❌ Event #${id} not found.`, flags: MessageFlags.Ephemeral });
     }
 
     // Invited users (inside server + manually invited)
@@ -41,6 +41,6 @@ module.exports = {
       `✅ **RSVP'd:** ${rsvp}\n` +
       `🌐 **Outside Guests:** ${outsideGuests}`;
 
-    await interaction.reply({ content: reply, ephemeral: true });
+    await interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
   }
 };

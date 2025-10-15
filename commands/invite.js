@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { getEvent, addInvited, addGuest } = require('../utils/eventManager');
 
 module.exports = {
@@ -26,7 +26,7 @@ module.exports = {
     const event = getEvent(id);
 
     if (!event) {
-      return interaction.reply({ content: `❌ Event #${id} not found.`, ephemeral: true });
+      return interaction.reply({ content: `❌ Event #${id} not found.`, flags: MessageFlags.Ephemeral });
     }
 
     const person = interaction.options.getMentionable('person');
@@ -35,14 +35,14 @@ module.exports = {
     if (person && guest) {
       return interaction.reply({ 
         content: `⚠️ Choose either **@person** OR **+guests**, not both.`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
     if (!person && !guest) {
       return interaction.reply({ 
         content: `⚠️ Please tag a person or add guests (+1, +2).`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
@@ -51,14 +51,14 @@ module.exports = {
       if (!person.user) {
         return interaction.reply({ 
           content: `⚠️ Cannot invite a role. Please tag a user.`, 
-          ephemeral: true 
+          flags: MessageFlags.Ephemeral 
         });
       }
 
       if (person.id === interaction.user.id) {
         return interaction.reply({ 
           content: `⚠️ You can't invite yourself!`, 
-          ephemeral: true 
+          flags: MessageFlags.Ephemeral 
         });
       }
 
@@ -70,7 +70,7 @@ module.exports = {
     if (!/^\+\d+$/.test(guest.trim())) {
       return interaction.reply({ 
         content: `⚠️ Invalid format. Use +1, +2, etc.`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
@@ -89,7 +89,7 @@ module.exports = {
 
     return interaction.followUp({
       content: `Here's the invite link (valid 1 hour):\n${invite.url}`,
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   },
 };

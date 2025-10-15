@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Partials, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -38,7 +38,7 @@ client.on('interactionCreate', async interaction => {
     await command.execute(interaction, client);
   } catch (error) {
     console.error(error);
-    await interaction.reply({ content: '❌ Error running command', ephemeral: true });
+    await interaction.reply({ content: '❌ Error running command', flags: MessageFlags.Ephemeral });
   }
 });
 

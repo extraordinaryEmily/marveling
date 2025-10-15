@@ -3,7 +3,8 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  MessageFlags
 } = require('discord.js');
 const {
   createEvent,
@@ -32,7 +33,7 @@ module.exports = {
       new ButtonBuilder().setCustomId('plan_game_night').setLabel('Plan Game Night').setEmoji('📅').setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.reply({ content: 'Play now or later?', components: [buttons], ephemeral: true });
+    await interaction.reply({ content: 'Play now or later?', components: [buttons], flags: MessageFlags.Ephemeral });
 
     const collector = interaction.channel.createMessageComponentCollector({
       filter: i => i.user.id === interaction.user.id,
@@ -49,7 +50,7 @@ module.exports = {
       if (btn.customId === 'plan_game_night') {
         await interaction.followUp({
           content: 'When do you want to play?\n💡 (All times are PST)',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
 
         const msgCollector = interaction.channel.createMessageCollector({
@@ -64,7 +65,7 @@ module.exports = {
           if (!isValidDateTime(time)) {
             await interaction.followUp({
               content: `❌ "${time}" doesn't look valid. Try "today 5PM", "Friday 8PM" or "10/18 5PM".`,
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -78,7 +79,7 @@ module.exports = {
               : `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
             await interaction.followUp({
               content: errorMsg,
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
@@ -111,7 +112,7 @@ module.exports = {
         });
 
         msgCollector.on('end', c => {
-          if (c.size === 0) interaction.followUp({ content: '⏰ Timed out. Try `/create` again.', ephemeral: true });
+          if (c.size === 0) interaction.followUp({ content: '⏰ Timed out. Try `/create` again.', flags: MessageFlags.Ephemeral });
         });
       }
 

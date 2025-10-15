@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { getAllEvents } = require('../utils/eventManager');
 
 module.exports = {
@@ -13,7 +13,7 @@ module.exports = {
     if (eventIds.length === 0) {
       return interaction.reply({
         content: '📭 No active events right now. Use `/create` to start one!',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -54,7 +54,7 @@ module.exports = {
 
     await interaction.reply({
       embeds: [embed],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 };
