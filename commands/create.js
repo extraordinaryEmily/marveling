@@ -10,35 +10,21 @@ function isValidDateTime(str) {
   if (!str || str.length < 4) return false;
   
   const lower = str.toLowerCase();
-  
-  // Check for day of week patterns
-  const daysOfWeek = ['monday', 'mon', 'tuesday', 'tue', 'tues', 'wednesday', 'wed', 'thursday', 'thu', 'thurs', 
-                      'friday', 'fri', 'saturday', 'sat', 'sunday', 'sun'];
+  const daysOfWeek = ['monday','mon','tuesday','tue','tues','wednesday','wed','thursday','thu','thurs',
+                      'friday','fri','saturday','sat','sunday','sun'];
   const hasDayOfWeek = daysOfWeek.some(day => lower.includes(day));
   
-  // Check for month patterns
-  const months = ['january', 'jan', 'february', 'feb', 'march', 'mar', 'april', 'apr', 'may', 
-                  'june', 'jun', 'july', 'jul', 'august', 'aug', 'september', 'sept', 'sep', 
-                  'october', 'oct', 'november', 'nov', 'december', 'dec'];
+  const months = ['january','jan','february','feb','march','mar','april','apr','may',
+                  'june','jun','july','jul','august','aug','september','sept','sep',
+                  'october','oct','november','nov','december','dec'];
   const hasMonth = months.some(month => lower.includes(month));
   
-  // Check for date patterns (MM/DD, DD/MM, numbers with slashes or dashes)
   const hasDatePattern = /\d{1,2}[\/\-]\d{1,2}/.test(str);
-  
-  // Check for time patterns (e.g., 8PM, 8:30pm, 8:30 PM, 20:00, 1am, 12:45AM)
   const hasTimePattern = /\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)|^.*\d{1,2}:\d{2}.*$/.test(str);
-  
-  // Check for "today", "tomorrow", "tonight"
   const hasRelativeDay = /\b(today|tomorrow|tonight|tmr|tmrw)\b/i.test(lower);
   
-  // Must have at least one date indicator (day, month, date pattern, or relative day)
   const hasDateIndicator = hasDayOfWeek || hasMonth || hasDatePattern || hasRelativeDay;
-  
-  // Must have a time pattern
-  if (!hasTimePattern) return false;
-  
-  // Must have a date indicator
-  if (!hasDateIndicator) return false;
+  if (!hasTimePattern || !hasDateIndicator) return false;
   
   return true;
 }
@@ -52,9 +38,8 @@ module.exports = {
     const role = interaction.guild.roles.cache.find(r => r.name === "rivaling");
     const rolePing = role ? `<@&${role.id}>` : '@rivaling';
 
-    // Send the prompt as an ephemeral message with buttons
-    const row = new ActionRowBuilder()
-      .addComponents(
+    // Initial prompt
+    const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('play_now')
           .setLabel('Play Now')
@@ -138,26 +123,26 @@ module.exports = {
       } else if (buttonInteraction.customId === 'plan_game_night') {
         // ===== PLAN GAME NIGHT FLOW =====
         await interaction.followUp({
-          content: 'When would you like to play? (e.g., **Friday 8PM**, **10/18 5PM**, **Oct 19th 3pm**, **Monday 1am**)\nPlease respond in the channel with a date and time.',
+          content:
+            'When would you like to play? (e.g., **Friday 8PM**, **10/18 5PM**, **Oct 19th 3pm**, **Monday 1am**)\nPlease respond in the channel with a date and time.',
           ephemeral: true
         });
 
         const msgCollector = interaction.channel.createMessageCollector({
           filter: m => m.author.id === interaction.user.id,
-          time: 60000,
+          time: 60000
         });
 
         let validResponseReceived = false;
 
         msgCollector.on('collect', async m => {
           if (validResponseReceived) return;
-
           const time = m.content.trim();
           
           // Validate the time format
           if (!isValidDateTime(time)) {
             await interaction.followUp({
-              content: `❌ "${time}" doesn't look like a valid date/time. Please provide a proper date and time (e.g., **Friday 8PM**, **10/18 5PM**, **Oct 19th 3pm**, **Monday 1am**).`,
+              content: `❌ "${time}" doesn't look like a valid date/time. Try again with something like **Friday 8PM**.`,
               ephemeral: true
             });
             return;
@@ -165,8 +150,6 @@ module.exports = {
 
           validResponseReceived = true;
           msgCollector.stop();
-
-          // Delete the user's message for privacy
           await m.delete().catch(() => {});
 
           const id = createEvent(interaction.user.id, 'planned', time);
@@ -186,7 +169,7 @@ module.exports = {
           const msg = await interaction.channel.send({
             content: `${rolePing} — ${interaction.user} is planning a game night!\n🗓 **Time:** ${time}`,
             embeds: [embed],
-            allowedMentions: { parse: ['roles'] },
+            allowedMentions: { parse: ['roles'] }
           });
 
           await msg.react('✅');
@@ -233,5 +216,5 @@ module.exports = {
         interaction.editReply({ content: '⏰ No response. Command cancelled.', components: [] });
       }
     });
-  },
+  }
 };
