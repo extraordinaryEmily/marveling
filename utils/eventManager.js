@@ -22,6 +22,10 @@ function getEvent(id) {
   return events[id];
 }
 
+function getAllEvents() {
+  return events;
+}
+
 function deleteEvent(id) {
   delete events[id];
 }
@@ -92,6 +96,7 @@ function cancelReminder(id) {
 module.exports = {
   createEvent,
   getEvent,
+  getAllEvents,
   deleteEvent,
   addAttendee,
   removeAttendee,
