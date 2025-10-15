@@ -35,9 +35,10 @@ module.exports = {
       : 'None';
 
     const reply =
+      `💡 *Use \`/invite\` to invite more people*\n\n` +
       `**🎮 Event #${id} — Guests**\n\n` +
       `👥 **Invited:** ${invited}\n` +
-      `✅ **RSVP’d:** ${rsvp}\n` +
+      `✅ **RSVP'd:** ${rsvp}\n` +
       `🌐 **Outside Guests:** ${outsideGuests}`;
 
     await interaction.reply({ content: reply, ephemeral: true });
