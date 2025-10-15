@@ -22,20 +22,20 @@ module.exports = {
     // Invited users (inside server + manually invited)
     const invited = event.invited?.length > 0
       ? event.invited.map(u => `<@${u}>`).join(', ')
-      : 'No one invited yet';
+      : 'None';
 
     // RSVP’d users (✅ only)
     const rsvp = event.attendees?.length > 0
       ? event.attendees.map(u => `<@${u}>`).join(', ')
-      : 'No one has RSVP’d yet';
+      : 'None';
 
     // Outside guests (+1s)
     const outsideGuests = event.guests?.length > 0
       ? event.guests.join(', ')
-      : 'No outside guests yet';
+      : 'None';
 
     const reply =
-      `**🎮 Event #${id} — Guest Overview**\n\n` +
+      `**🎮 Event #${id} — Guests**\n\n` +
       `👥 **Invited:** ${invited}\n` +
       `✅ **RSVP’d:** ${rsvp}\n` +
       `🌐 **Outside Guests:** ${outsideGuests}`;

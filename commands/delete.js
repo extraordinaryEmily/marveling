@@ -25,6 +25,6 @@ module.exports = {
     }
 
     deleteEvent(id);
-    await interaction.reply(`🗑️ Event **#${id}** has been deleted.`);
+    await interaction.reply(`🗑️ Event #${id} has been deleted.`);
   },
 };
