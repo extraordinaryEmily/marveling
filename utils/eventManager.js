@@ -10,7 +10,10 @@ function createEvent(creatorId, type, time = null) {
     time,
     invited: [],      // invited inside server users
     attendees: [],    // confirmed RSVP ✅
-    guests: []        // outside server guests
+    guests: [],       // outside server guests
+    reminderTimeoutId: null,  // for scheduled reminders
+    channelId: null,  // channel to send reminder in
+    messageId: null   // original message ID
   };
   return id;
 }
@@ -68,6 +71,24 @@ function listGuests(id) {
   return { invited: event.invited, attendees: event.attendees, guests: event.guests };
 }
 
+// Reminder management
+function setReminder(id, timeoutId, channelId, messageId) {
+  const event = getEvent(id);
+  if (!event) return false;
+  event.reminderTimeoutId = timeoutId;
+  event.channelId = channelId;
+  event.messageId = messageId;
+  return true;
+}
+
+function cancelReminder(id) {
+  const event = getEvent(id);
+  if (!event || !event.reminderTimeoutId) return false;
+  clearTimeout(event.reminderTimeoutId);
+  event.reminderTimeoutId = null;
+  return true;
+}
+
 module.exports = {
   createEvent,
   getEvent,
@@ -77,5 +98,7 @@ module.exports = {
   addInvited,
   removeInvited,
   addGuest,
-  listGuests
+  listGuests,
+  setReminder,
+  cancelReminder
 };

@@ -1,0 +1,148 @@
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const {
+  getEvent,
+  deleteEvent,
+  createEvent,
+  addInvited,
+  cancelReminder
+} = require('../utils/eventManager');
+const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('reschedule')
+    .setDescription('Reschedule an existing game night')
+    .addStringOption(option =>
+      option.setName('id')
+        .setDescription('Event ID to reschedule (e.g. 1001)')
+        .setRequired(true)
+    ),
+
+  async execute(interaction) {
+    const eventId = interaction.options.getString('id').replace('#', '');
+    const event = getEvent(eventId);
+
+    // Validate event exists
+    if (!event) {
+      return interaction.reply({ 
+        content: `❌ Event #${eventId} not found.`, 
+        ephemeral: true 
+      });
+    }
+
+    // Check if event is planned (can't reschedule "play now" events)
+    if (event.type !== 'planned') {
+      return interaction.reply({ 
+        content: `❌ You can only reschedule planned game nights, not "Play Now" sessions.`, 
+        ephemeral: true 
+      });
+    }
+
+    // Only creator can reschedule
+    if (interaction.user.id !== event.creatorId) {
+      return interaction.reply({ 
+        content: `🚫 Only the host can reschedule this event.`, 
+        ephemeral: true 
+      });
+    }
+
+    // Prompt for new time
+    await interaction.reply({
+      content: '🗓 Reschedule Game Night\nWhat\'s the new time?',
+      ephemeral: true
+    });
+
+    const msgCollector = interaction.channel.createMessageCollector({
+      filter: m => m.author.id === interaction.user.id,
+      time: 60000
+    });
+
+    msgCollector.on('collect', async m => {
+      const input = m.content.trim();
+
+      // Handle cancellation
+      if (input.toLowerCase() === 'cancel' || input.toLowerCase() === 'no') {
+        await m.delete().catch(() => {});
+        msgCollector.stop('cancel');
+        await interaction.followUp({
+          content: '🛑 Reschedule cancelled.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Validate time format
+      if (!isValidDateTime(input)) {
+        await interaction.followUp({
+          content: `❌ "${input}" is not a valid date/time. Try "Oct 18 5PM" or "Friday 8PM".`,
+          ephemeral: true
+        });
+        return;
+      }
+
+      // Validate and adjust time
+      const result = validateAndAdjustEventTime(input);
+
+      if (!result.eventTime) {
+        const errorMsg = result.debugInfo.explicitToday 
+          ? `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm". (All times are PST)`
+          : `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
+        await interaction.followUp({
+          content: errorMsg,
+          ephemeral: true
+        });
+        return;
+      }
+
+      msgCollector.stop('success');
+      await m.delete().catch(() => {});
+
+      // Get role for pinging
+      const role = interaction.guild.roles.cache.find(r => r.name === 'rivaling');
+      const rolePing = role ? `<@&${role.id}>` : '@rivaling';
+
+      // Cancel old reminder and delete old event
+      cancelReminder(eventId);
+      const oldInvited = [...event.invited];
+      deleteEvent(eventId);
+
+      // Create new event
+      const newId = createEvent(interaction.user.id, 'planned', input);
+      oldInvited.forEach(userId => addInvited(newId, userId));
+
+      // Send new event message
+      const newEmbed = new EmbedBuilder()
+        .setColor(0x00ff88)
+        .setTitle('🔁 Marvel Rivals Game Night (Rescheduled)')
+        .addFields(
+          { name: 'Event ID', value: `#${newId}` },
+          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+        );
+
+      const newMsg = await interaction.channel.send({
+        content: `🔁 <@${interaction.user.id}> **rescheduled event #${eventId}!**\n🗓 **New Time:** ${input} (PST)\n${rolePing}`,
+        embeds: [newEmbed],
+        allowedMentions: { parse: ['roles'] }
+      });
+
+      // Add reactions
+      for (const e of ['✅', '🤔', '❌', '🔁']) await newMsg.react(e);
+
+      // Set up RSVP collector (enables reaction tracking and auto-reschedule)
+      setupRSVPCollector(newMsg, interaction, rolePing, newId, role, 'planned', input);
+
+      // Schedule new reminder
+      scheduleReminder(newId, input, interaction.channel, rolePing, interaction.user);
+    });
+
+    msgCollector.on('end', (collected, reason) => {
+      if (reason === 'time') {
+        interaction.followUp({ 
+          content: '⏰ Timed out. Try `/reschedule` again.', 
+          ephemeral: true 
+        });
+      }
+    });
+  }
+};
+
