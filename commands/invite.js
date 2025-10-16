@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { getEvent, addInvited, addGuest } = require('../utils/eventManager');
+const { trackInviteSent } = require('../utils/achievementManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -63,7 +64,16 @@ module.exports = {
       }
 
       addInvited(id, person.id);
-      return interaction.reply(`📩 Invited ${person} to event #${id}!`);
+      
+      // Track achievement
+      const achievements = trackInviteSent(interaction.user.id, 1);
+      let replyText = `📩 Invited ${person} to event #${id}!`;
+      if (achievements.length > 0) {
+        const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
+        replyText += `\n\n${achievementText}`;
+      }
+      
+      return interaction.reply(replyText);
     }
 
     // Outside guest invite
@@ -83,9 +93,15 @@ module.exports = {
 
     addGuest(id, `${interaction.user.username} (${guest})`);
 
-    await interaction.reply(
-      `🌐 ${interaction.user.username} invited **${guest}** guest(s) to event #${id}.`
-    );
+    // Track achievement
+    const achievements = trackInviteSent(interaction.user.id, guestCount);
+    let replyText = `🌐 ${interaction.user.username} invited **${guest}** guest(s) to event #${id}.`;
+    if (achievements.length > 0) {
+      const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
+      replyText += `\n\n${achievementText}`;
+    }
+
+    await interaction.reply(replyText);
 
     return interaction.followUp({
       content: `Here's the invite link (valid 1 hour):\n${invite.url}`,

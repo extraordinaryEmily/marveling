@@ -13,7 +13,8 @@ function createEvent(creatorId, type, time = null) {
     guests: [],       // outside server guests
     reminderTimeoutId: null,  // for scheduled reminders
     channelId: null,  // channel to send reminder in
-    messageId: null   // original message ID
+    messageId: null,  // original message ID
+    createdAt: Date.now()  // timestamp for achievement tracking
   };
   return id;
 }

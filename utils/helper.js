@@ -9,6 +9,7 @@ const {
   createEvent,
   addInvited
 } = require('./eventManager');
+const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent } = require('./achievementManager');
 const chrono = require('chrono-node');
 
 /**
@@ -245,8 +246,48 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
   collector.on('collect', (reaction, user) => {
     counts[reaction.emoji.name]++;
     
-    if (reaction.emoji.name === '✅') addAttendee(id, user.id);
-    else if (reaction.emoji.name === '❌') removeAttendee(id, user.id);
+    const event = getEvent(id);
+    const achievements = [];
+    
+    if (reaction.emoji.name === '✅') {
+      addAttendee(id, user.id);
+      
+      // Track RSVP achievement (only for Available)
+      const rsvpAchievements = trackRSVP(user.id);
+      achievements.push(...rsvpAchievements);
+      
+      // Check for fast RSVP (within 30 seconds, not your own event)
+      if (event && user.id !== event.creatorId) {
+        const timeSinceCreation = (Date.now() - event.createdAt) / 1000; // seconds
+        if (timeSinceCreation <= 30) {
+          const bullseyeAchievements = trackFastRSVP(user.id);
+          achievements.push(...bullseyeAchievements);
+        }
+      }
+      
+      // Check for Worthy achievement (5+ RSVPs on host's event)
+      if (event && event.attendees.length >= 5) {
+        const worthyAchievements = trackWorthyEvent(event.creatorId);
+        if (worthyAchievements.length > 0) {
+          const worthyText = worthyAchievements.map(a => `<@${event.creatorId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+          msg.channel.send(worthyText).catch(() => {});
+        }
+      }
+    }
+    else if (reaction.emoji.name === '❌') {
+      removeAttendee(id, user.id);
+    }
+    else if (reaction.emoji.name === '🤔') {
+      // Track Maybe responses
+      const maybeAchievements = trackMaybe(user.id);
+      achievements.push(...maybeAchievements);
+    }
+    
+    // Send achievement notifications
+    if (achievements.length > 0) {
+      const achievementText = achievements.map(a => `${user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
+      msg.channel.send(achievementText).catch(() => {});
+    }
 
     // Remove conflicting RSVPs
     msg.reactions.cache.forEach(r => {

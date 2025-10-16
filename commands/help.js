@@ -16,6 +16,7 @@ module.exports = {
       `\`/invite\` - Invite users or add outside guests\n` +
       `\`/reschedule\` - Reschedule a planned game night\n` +
       `\`/delete\` - Cancel and delete an event\n` +
+      `\`/achievements\` - View your rankings and achievements\n` +
       `\`/help\` - View this help message`;
 
     await interaction.reply({

@@ -17,6 +17,8 @@ const {
   getEvent
 } = require('../utils/eventManager');
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
+const { trackHostCreated, checkMoonKnight, checkWakandaStrategist, trackHostWithTimestamp } = require('../utils/achievementManager');
+const chrono = require('chrono-node');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -95,6 +97,39 @@ module.exports = {
           await m.delete().catch(() => {});
           const id = createEvent(interaction.user.id, 'planned', time);
           
+          // Track achievements
+          const achievements = trackHostCreated(interaction.user.id);
+          
+          // Check Moon Knight (midnight-4am PST)
+          const pstHour = new Date().toLocaleString('en-US', { 
+            timeZone: 'America/Los_Angeles', 
+            hour: 'numeric', 
+            hour12: false 
+          });
+          const hour = parseInt(pstHour);
+          const moonKnight = checkMoonKnight(interaction.user.id, hour);
+          achievements.push(...moonKnight);
+          
+          // Check Wakanda Strategist (20+ days in advance)
+          const parsed = chrono.parse(time, new Date(), { timezone: 'PST' });
+          if (parsed && parsed.length > 0) {
+            const eventTime = parsed[0].start.date();
+            const daysInAdvance = (eventTime - Date.now()) / (1000 * 60 * 60 * 24);
+            const wakanda = checkWakandaStrategist(interaction.user.id, daysInAdvance);
+            achievements.push(...wakanda);
+          }
+          
+          // Track host frequency (5 in 7 days)
+          const againAchievement = trackHostWithTimestamp(interaction.user.id);
+          achievements.push(...againAchievement);
+          
+          if (achievements.length > 0) {
+            const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
+            await interaction.followUp({
+              content: achievementText
+            });
+          }
+          
           if (role) {
             role.members.forEach(member => addInvited(id, member.id));
           }
@@ -131,6 +166,31 @@ module.exports = {
       // ===============================
       else if (btn.customId === 'play_now') {
         const id = createEvent(interaction.user.id, 'now');
+        
+        // Track achievements
+        const achievements = trackHostCreated(interaction.user.id);
+        
+        // Check Moon Knight (midnight-4am PST)
+        const pstHour = new Date().toLocaleString('en-US', { 
+          timeZone: 'America/Los_Angeles', 
+          hour: 'numeric', 
+          hour12: false 
+        });
+        const hour = parseInt(pstHour);
+        const moonKnight = checkMoonKnight(interaction.user.id, hour);
+        achievements.push(...moonKnight);
+        
+        // Track host frequency (5 in 7 days)
+        const againAchievement = trackHostWithTimestamp(interaction.user.id);
+        achievements.push(...againAchievement);
+        
+        if (achievements.length > 0) {
+          const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
+          await interaction.followUp({
+            content: achievementText
+          });
+        }
+        
         addInvited(id, interaction.user.id);
         if (role) {
           await interaction.guild.members.fetch();
