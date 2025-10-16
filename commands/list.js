@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { getAllEvents } = require('../utils/eventManager');
+const chrono = require('chrono-node');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,8 +10,32 @@ module.exports = {
   async execute(interaction) {
     const events = getAllEvents();
     const eventIds = Object.keys(events);
+    const now = new Date();
 
-    if (eventIds.length === 0) {
+    // Filter out past events
+    const activeEventIds = eventIds.filter(id => {
+      const event = events[id];
+      
+      // "Play Now" events are always considered active (they don't have an end time)
+      if (event.type === 'now') {
+        return true;
+      }
+      
+      // For planned events, check if the time has passed
+      if (event.type === 'planned' && event.time) {
+        const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
+        if (parsed && parsed.length > 0) {
+          const eventTime = parsed[0].start.date();
+          // Consider event past if it was more than 30 minutes ago (after the event should have started)
+          const eventEndTime = new Date(eventTime.getTime() + 30 * 60 * 1000);
+          return eventEndTime > now;
+        }
+      }
+      
+      return true; // Keep event if we can't determine time
+    });
+
+    if (activeEventIds.length === 0) {
       return interaction.reply({
         content: '📭 No active events right now. Use `/create` to start one!',
         flags: MessageFlags.Ephemeral
@@ -20,7 +45,7 @@ module.exports = {
     // Build the event list
     let eventList = '💡 *For full guest list details, use `/guests`*\n\n';
 
-    for (const id of eventIds) {
+    for (const id of activeEventIds) {
       const event = events[id];
       
       // Event type and time
