@@ -33,7 +33,7 @@ module.exports = {
     // Check if event is planned (can't reschedule "play now" events)
     if (event.type !== 'planned') {
       return interaction.reply({ 
-        content: `❌ You can only reschedule planned game nights, not "Play Now" sessions.`, 
+        content: `❌ You cannot reschedule "Play Now" sessions.`, 
         flags: MessageFlags.Ephemeral 
       });
     }
@@ -48,7 +48,7 @@ module.exports = {
 
     // Prompt for new time
     await interaction.reply({
-      content: '🗓 Reschedule Game Night\nWhat\'s the new time?',
+      content: '🗓 What\'s the new time?',
       flags: MessageFlags.Ephemeral
     });
 
@@ -74,7 +74,7 @@ module.exports = {
       // Validate time format
       if (!isValidDateTime(input)) {
         await interaction.followUp({
-          content: `❌ "${input}" is not a valid date/time. Try "Oct 18 5PM" or "Friday 8PM".`,
+          content: `❌ "${input}" is not valid. Try "Oct 18 5PM" or "Friday 8PM".`,
           flags: MessageFlags.Ephemeral
         });
         return;
@@ -85,8 +85,8 @@ module.exports = {
 
       if (!result.eventTime) {
         const errorMsg = result.debugInfo.explicitToday 
-          ? `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm". (All times are PST)`
-          : `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
+          ? `❌ That time has already passed today! (All times are PST)`
+          : `❌ Unable to schedule for that time. Please try a different time.`;
         await interaction.followUp({
           content: errorMsg,
           flags: MessageFlags.Ephemeral

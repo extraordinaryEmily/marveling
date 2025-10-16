@@ -4,7 +4,7 @@ const { deleteEvent, getEvent, cancelReminder } = require('../utils/eventManager
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('delete')
-    .setDescription('Delete an existing Marveling event')
+    .setDescription('Delete an existing event')
     .addStringOption(option =>
       option.setName('id')
         .setDescription('Event ID to delete (e.g. 1001)')

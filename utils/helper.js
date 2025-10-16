@@ -284,7 +284,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         // Validate and adjust time
         if (!isValidDateTime(input)) {
           await interaction.followUp({
-            content: `❌ "${m.content.trim()}" is not a valid date/time. Try "Oct 18 5PM", or type "no" to cancel.`,
+            content: `❌ "${m.content.trim()}" is not valid. Try "Oct 18 5PM", or type "no" to cancel.`,
             flags: MessageFlags.Ephemeral
           });
           return;
@@ -296,13 +296,13 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
           let errorMsg;
           
           if (result.debugInfo.isTooFarInFuture) {
-            errorMsg = `❌ That's too far in the future! Events can only be scheduled up to 24 days ahead. Try a closer date or type "no" to cancel. (All times are PST)`;
+            errorMsg = `❌ That's too far in the future! Events can only be scheduled up to 24 days ahead.`;
           } else if (result.debugInfo.explicitToday) {
-            errorMsg = `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm", or type "no" to cancel. (All times are PST)`;
+            errorMsg = `❌ That time has already passed today! Try again or type "no" to cancel. (All times are PST)`;
           } else {
-            errorMsg = `❌ Unable to schedule for that time. Try a different time or type "no" to cancel. (All times are PST)`;
+            errorMsg = `❌ Unable to schedule for that time. Try a different time or type "no" to cancel.`;
           }
-          
+
           await interaction.followUp({
             content: errorMsg,
             flags: MessageFlags.Ephemeral

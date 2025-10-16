@@ -4,7 +4,7 @@ const { getEvent, addInvited, addGuest } = require('../utils/eventManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('invite')
-    .setDescription('Invite people to your Marvel Rivals game night')
+    .setDescription('Invite people to your game night')
     .addStringOption(option =>
       option.setName('id')
         .setDescription('Event ID (e.g. 1001)')

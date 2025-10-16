@@ -4,7 +4,7 @@ const { getEvent } = require('../utils/eventManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('guests')
-    .setDescription('See who has been invited and who RSVP’d for an event')
+    .setDescription('See who has been invited or RSVP’d for an event')
     .addStringOption(option =>
       option.setName('id')
         .setDescription('Event ID to view (e.g. 1001)')

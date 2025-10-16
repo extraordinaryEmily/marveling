@@ -77,11 +77,11 @@ module.exports = {
             let errorMsg;
             
             if (result.debugInfo.isTooFarInFuture) {
-              errorMsg = `❌ That's too far in the future! Events can only be scheduled up to 24 days ahead. Try a closer date. (All times are PST)`;
+              errorMsg = `❌ Too far in the future! Events can only be scheduled up to 24 days ahead.`;
             } else if (result.debugInfo.explicitToday) {
-              errorMsg = `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm". (All times are PST)`;
+              errorMsg = `❌ That time has already passed today! (All times are PST)`;
             } else {
-              errorMsg = `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
+              errorMsg = `❌ Unable to schedule for that time. Please try a different time.`;
             }
             
             await interaction.followUp({
