@@ -7,7 +7,9 @@ module.exports = {
 
   async execute(interaction) {
     const helpText = 
-      `**🦸 Marvel Rivals Bot Commands**\n` +
+      `**🦸 Marvel Rivals Bot**\n` +
+      `Coordinate game sessions (in PST), squad up with friends, and never miss a Marvel Rivals match!\n\n` +
+      `**Commands:**\n` +
       `\`/create\` - Create an impromptu or planned event\n` +
       `\`/list\` - View all active events with confirmed players\n` +
       `\`/guests\` - View the full guest list for a specific event\n` +
