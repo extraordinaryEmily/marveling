@@ -74,9 +74,16 @@ module.exports = {
           const result = validateAndAdjustEventTime(time);
           
           if (!result.eventTime) {
-            const errorMsg = result.debugInfo.explicitToday 
-              ? `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm". (All times are PST)`
-              : `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
+            let errorMsg;
+            
+            if (result.debugInfo.isTooFarInFuture) {
+              errorMsg = `❌ That's too far in the future! Events can only be scheduled up to 24 days ahead. Try a closer date. (All times are PST)`;
+            } else if (result.debugInfo.explicitToday) {
+              errorMsg = `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm". (All times are PST)`;
+            } else {
+              errorMsg = `❌ Unable to schedule for that time. Please try a different time. (All times are PST)`;
+            }
+            
             await interaction.followUp({
               content: errorMsg,
               flags: MessageFlags.Ephemeral
@@ -87,7 +94,10 @@ module.exports = {
           msgCollector.stop();
           await m.delete().catch(() => {});
           const id = createEvent(interaction.user.id, 'planned', time);
-          if (role) role.members.forEach(member => addInvited(id, member.id));
+          
+          if (role) {
+            role.members.forEach(member => addInvited(id, member.id));
+          }
           addInvited(id, interaction.user.id);
 
           const embed = new EmbedBuilder()

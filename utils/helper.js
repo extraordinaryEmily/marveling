@@ -97,6 +97,22 @@ function validateAndAdjustEventTime(timeString) {
   // Re-check if time is in the past after correction
   debugInfo.isInPast = eventTime <= now;
   
+  // Check if event is too far in the future (max 24 days due to setTimeout limitation)
+  const MAX_DAYS_AHEAD = 24;
+  const maxFutureTime = new Date(now.getTime() + (MAX_DAYS_AHEAD * 24 * 60 * 60 * 1000));
+  const daysAhead = Math.ceil((eventTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (eventTime > maxFutureTime) {
+    debugInfo.isTooFarInFuture = true;
+    debugInfo.daysAhead = daysAhead;
+    debugInfo.maxDaysAllowed = MAX_DAYS_AHEAD;
+    debugInfo.error = `Event is too far in the future (${daysAhead} days ahead, max is ${MAX_DAYS_AHEAD} days)`;
+    return { eventTime: null, debugInfo };
+  }
+  
+  debugInfo.isTooFarInFuture = false;
+  debugInfo.daysAhead = daysAhead;
+  
   // If parsed time is in the past
   if (eventTime <= now) {
     // Check if it's today
@@ -139,16 +155,28 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   // Parse the time string with PST timezone context
   const parsed = chrono.parse(timeString, new Date(), { timezone: 'PST' });
   
-  if (!parsed || parsed.length === 0) return false;
+  if (!parsed || parsed.length === 0) {
+    return false;
+  }
   
   const eventTime = parsed[0].start.date();
   const reminderTime = new Date(eventTime.getTime() - 45 * 60 * 1000); // 45 minutes before
   const now = new Date();
   
   // Only schedule if reminder time is in the future
-  if (reminderTime <= now) return false;
+  if (reminderTime <= now) {
+    return false;
+  }
   
   const delayMs = reminderTime.getTime() - now.getTime();
+  
+  // Safety check: JavaScript setTimeout has a max delay of ~24.8 days (2^31 - 1 milliseconds)
+  // This should never trigger since we prevent events >24 days, but kept as a safety net
+  const MAX_TIMEOUT_MS = 2147483647; // Max 32-bit signed integer
+  
+  if (delayMs > MAX_TIMEOUT_MS) {
+    return false;
+  }
   
   // Randomized reminder messages
   const reminderMessages = [
@@ -216,6 +244,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
 
   collector.on('collect', (reaction, user) => {
     counts[reaction.emoji.name]++;
+    
     if (reaction.emoji.name === '✅') addAttendee(id, user.id);
     else if (reaction.emoji.name === '❌') removeAttendee(id, user.id);
 
@@ -264,16 +293,23 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         const result = validateAndAdjustEventTime(input);
         
         if (!result.eventTime) {
-          const errorMsg = result.debugInfo.explicitToday 
-            ? `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm", or type "no" to cancel. (All times are PST)`
-            : `❌ Unable to schedule for that time. Try a different time or type "no" to cancel. (All times are PST)`;
+          let errorMsg;
+          
+          if (result.debugInfo.isTooFarInFuture) {
+            errorMsg = `❌ That's too far in the future! Events can only be scheduled up to 24 days ahead. Try a closer date or type "no" to cancel. (All times are PST)`;
+          } else if (result.debugInfo.explicitToday) {
+            errorMsg = `❌ That time has already passed today! Try a future time or specify a day name like "wed 5pm", or type "no" to cancel. (All times are PST)`;
+          } else {
+            errorMsg = `❌ Unable to schedule for that time. Try a different time or type "no" to cancel. (All times are PST)`;
+          }
+          
           await interaction.followUp({
             content: errorMsg,
             flags: MessageFlags.Ephemeral
           });
           return;
         }
-
+        
         // Handle valid reschedule
         await m.delete().catch(() => {});
         msgCollector.stop('reschedule');
@@ -285,7 +321,10 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
 
         // Create new event
         const newId = createEvent(interaction.user.id, 'planned', input);
-        if (role) role.members.forEach(member => addInvited(newId, member.id));
+        
+        if (role) {
+          role.members.forEach(member => addInvited(newId, member.id));
+        }
         addInvited(newId, interaction.user.id);
 
         // Send new event message
@@ -302,7 +341,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
           embeds: [newEmbed],
           allowedMentions: { parse: ['roles'] }
         });
-
+        
         // Add reactions
         for (const e of ['✅', '🤔', '❌', '🔁']) await newMsg.react(e);
 
