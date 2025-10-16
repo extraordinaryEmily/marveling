@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { getEvent, addInvited, addGuest } = require('../utils/eventManager');
+const { getEvent, addInvited, addGuest, getUserGuestCount } = require('../utils/eventManager');
 const { trackInviteSent } = require('../utils/achievementManager');
 
 module.exports = {
@@ -85,17 +85,37 @@ module.exports = {
     }
 
     const guestCount = parseInt(guest.replace('+', ''), 10);
+    
+    // Check current total for this user in this event
+    const currentTotal = getUserGuestCount(id, interaction.user.id);
+    const newTotal = currentTotal + guestCount;
+    
+    if (newTotal > 5) {
+      const remaining = 5 - currentTotal;
+      if (remaining <= 0) {
+        return interaction.reply({ 
+          content: `⚠️ You've already invited the maximum of **5 guests** for this event.`, 
+          flags: MessageFlags.Ephemeral 
+        });
+      } else {
+        return interaction.reply({ 
+          content: `⚠️ You can only invite **${remaining} more guest(s)** for this event (currently at ${currentTotal}/5).`, 
+          flags: MessageFlags.Ephemeral 
+        });
+      }
+    }
+
     const invite = await interaction.channel.createInvite({
       maxAge: 3600,
       maxUses: guestCount,
       unique: true,
     });
 
-    addGuest(id, `${interaction.user.username} (${guest})`);
+    addGuest(id, interaction.user.id, interaction.user.username, guestCount);
 
     // Track achievement
     const achievements = trackInviteSent(interaction.user.id, guestCount);
-    let replyText = `🌐 ${interaction.user.username} invited **${guest}** guest(s) to event #${id}.`;
+    let replyText = `🌐 ${interaction.user.username} invited **${guest}** guest(s) to event #${id} (${newTotal}/5 total).`;
     if (achievements.length > 0) {
       const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
       replyText += `\n\n${achievementText}`;

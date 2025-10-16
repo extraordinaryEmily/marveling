@@ -62,11 +62,20 @@ function removeInvited(id, user) {
 }
 
 // Outside guests
-function addGuest(id, guestName) {
+function addGuest(id, userId, username, count) {
   const event = getEvent(id);
   if (!event) return false;
-  event.guests.push(guestName);
+  event.guests.push({ userId, username, count });
   return true;
+}
+
+// Get total guest count for a specific user in an event
+function getUserGuestCount(id, userId) {
+  const event = getEvent(id);
+  if (!event) return 0;
+  return event.guests
+    .filter(g => g.userId === userId)
+    .reduce((total, g) => total + g.count, 0);
 }
 
 // List guests
@@ -104,6 +113,7 @@ module.exports = {
   addInvited,
   removeInvited,
   addGuest,
+  getUserGuestCount,
   listGuests,
   setReminder,
   cancelReminder

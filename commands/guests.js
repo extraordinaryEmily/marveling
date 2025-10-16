@@ -31,7 +31,7 @@ module.exports = {
 
     // Outside guests (+1s)
     const outsideGuests = event.guests?.length > 0
-      ? event.guests.join(', ')
+      ? event.guests.map(g => `${g.username} (+${g.count})`).join(', ')
       : 'None';
 
     const reply =
