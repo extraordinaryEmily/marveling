@@ -1,17 +1,20 @@
 {
   "name": "marveling",
   "version": "1.0.0",
-  "description": "",
+  "description": "A custom Discord bot for coordinating Marvel Rivals game sessions",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["discord", "bot", "marvel-rivals"],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "chrono-node": "^2.9.0",
     "discord.js": "^14.22.1",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2"
   }
 }

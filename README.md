@@ -57,11 +57,11 @@ Squad up with friends, track achievements, and never miss a match!
 - Discord Application ID
 - **Important:** Users need the `@rivaling` role in your server to use the bot
 
-### Installation
+### Local Installation
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/extraordinaryEmily/marveling
    cd marveling
    ```
 
@@ -79,13 +79,77 @@ Squad up with friends, track achievements, and never miss a match!
 
 4. **Deploy slash commands**
    ```bash
-   node deploy-commands.js
+   npm run deploy
    ```
 
 5. **Start the bot**
    ```bash
-   node index.js
+   npm start
    ```
+
+---
+
+## ☁️ Deploy to Render (Free Hosting)
+
+### Step 1: Prepare Your Repository
+
+1. **Ensure your code is pushed to GitHub**
+   ```bash
+   git add .
+   git commit -m "Prepare for Render deployment"
+   git push origin main
+   ```
+
+### Step 2: Deploy on Render
+
+1. **Sign up at [render.com](https://render.com)**
+
+2. **Create a New Web Service**
+   - Click "New +" → "Web Service"
+   - Connect your GitHub account
+   - Select your repository
+
+3. **Configure the service:**
+   - **Name:** `marveling-bot` (or any name you prefer)
+   - **Environment:** `Node`
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - **Instance Type:** `Free`
+
+4. **Add Environment Variables:**
+   Click "Advanced" → "Add Environment Variable" and add:
+   ```
+   DISCORD_TOKEN=your_bot_token_here
+   RENDER_URL=https://your-app-name.onrender.com
+   ```
+   *(Replace `your-app-name` with your actual Render app name)*
+
+5. **Deploy!**
+   - Click "Create Web Service"
+   - Wait for the build to complete
+   - Your bot will be live! 🎉
+
+### Step 3: Deploy Commands to Discord
+
+Once deployed, you need to register your slash commands:
+
+1. **Option A: Run locally once**
+   ```bash
+   npm run deploy
+   ```
+
+2. **Option B: Use Render Shell**
+   - In Render dashboard → "Shell" tab
+   - Run: `node deploy-commands.js`
+
+### 🔄 Keep-Alive System
+
+The bot includes a built-in keep-alive system that:
+- ✅ Pings itself every 14 minutes to prevent sleep
+- 😴 Automatically sleeps during 4am-8am PST (to save free tier hours)
+- 🌐 Exposes health endpoints at `/` and `/health`
+
+**No external services needed!** The bot keeps itself alive automatically.
 
 ---
 

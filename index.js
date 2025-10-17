@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, Partials, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 
 const client = new Client({
   intents: [
@@ -43,3 +44,72 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+
+// ========================================
+// Express Server for Render Health Checks
+// ========================================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.status(200).send('🦸 Marveling bot is alive!');
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    bot: client.user ? client.user.tag : 'Not ready'
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Express server running on port ${PORT}`);
+});
+
+// ========================================
+// Self-Ping Keep-Alive Service
+// ========================================
+const RENDER_URL = process.env.RENDER_URL; // e.g., https://your-app-name.onrender.com
+
+function isWithinSleepWindow() {
+  // Check if current time is between 4am-8am PST
+  const now = new Date();
+  
+  // Convert to PST (UTC-8 or UTC-7 during DST)
+  const pstOffset = -8 * 60; // PST is UTC-8
+  const localOffset = now.getTimezoneOffset();
+  const pstTime = new Date(now.getTime() + (localOffset + pstOffset) * 60000);
+  
+  const hour = pstTime.getHours();
+  
+  // Sleep between 4am and 8am PST
+  return hour >= 4 && hour < 8;
+}
+
+function keepAlive() {
+  if (!RENDER_URL) {
+    console.log('⚠️  RENDER_URL not set, skipping keep-alive ping');
+    return;
+  }
+
+  setInterval(() => {
+    if (isWithinSleepWindow()) {
+      console.log('😴 Within sleep window (4am-8am PST), skipping ping');
+      return;
+    }
+
+    // Ping every 14 minutes (840000 ms)
+    fetch(RENDER_URL + '/health')
+      .then(res => res.json())
+      .then(data => console.log('✅ Keep-alive ping successful:', data.timestamp))
+      .catch(err => console.error('❌ Keep-alive ping failed:', err.message));
+  }, 14 * 60 * 1000); // 14 minutes
+}
+
+// Start keep-alive after bot is ready
+client.once('clientReady', () => {
+  keepAlive();
+  console.log('🔄 Keep-alive service started');
+});
