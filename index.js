@@ -73,21 +73,6 @@ app.listen(PORT, () => {
 // ========================================
 const RENDER_URL = process.env.RENDER_URL; // e.g., https://your-app-name.onrender.com
 
-function isWithinSleepWindow() {
-  // Check if current time is between 4am-8am PST
-  const now = new Date();
-  
-  // Convert to PST (UTC-8 or UTC-7 during DST)
-  const pstOffset = -8 * 60; // PST is UTC-8
-  const localOffset = now.getTimezoneOffset();
-  const pstTime = new Date(now.getTime() + (localOffset + pstOffset) * 60000);
-  
-  const hour = pstTime.getHours();
-  
-  // Sleep between 4am and 8am PST
-  return hour >= 4 && hour < 8;
-}
-
 function keepAlive() {
   if (!RENDER_URL) {
     console.log('⚠️  RENDER_URL not set, skipping keep-alive ping');
@@ -95,11 +80,6 @@ function keepAlive() {
   }
 
   setInterval(() => {
-    if (isWithinSleepWindow()) {
-      console.log('😴 Within sleep window (4am-8am PST), skipping ping');
-      return;
-    }
-
     // Ping every 14 minutes (840000 ms)
     fetch(RENDER_URL + '/health')
       .then(res => res.json())
