@@ -178,6 +178,8 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   if (delayMs > MAX_TIMEOUT_MS) {
     return false;
   }
+
+  console.log(`Event ${eventId} reminder scheduled in ${delayMs}ms`);
   
   // Randomized reminder messages
   const reminderMessages = [

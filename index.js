@@ -81,6 +81,25 @@ function keepAlive() {
 
   setInterval(() => {
     // Ping every 14 minutes (840000 ms)
+    // Log the time left for each event's reminder
+    const now = new Date();
+    const events = getAllEvents();
+    for (const eventId in events) {
+      const event = events[eventId];
+      if (event.reminderTimeoutId) {
+        const reminderTime = new Date(event.reminderTimeoutId);
+        const timeLeft = reminderTime.getTime() - now.getTime();
+        console.log(`Event ${eventId} reminder in ${timeLeft}ms`);
+      }
+    }
+    
+    // Log the active events
+    const activeEventIds = Object.keys(events).filter(id => {
+      const event = events[id];
+      return event.reminderTimeoutId || event.type === 'now';
+    });
+    console.log(`Active events: ${activeEventIds.join(', ')}`);
+    
     fetch(RENDER_URL + '/health')
       .then(res => res.json())
       .then(data => console.log('✅ Keep-alive ping successful:', data.timestamp))
