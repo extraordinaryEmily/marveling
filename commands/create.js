@@ -165,7 +165,7 @@ module.exports = {
       // PLAY NOW FLOW
       // ===============================
       else if (btn.customId === 'play_now') {
-        const id = createEvent(interaction.user.id, 'now');
+        const id = createEvent(interaction.user.id, 'now', Date.now());
         
         // Track achievements
         const achievements = trackHostCreated(interaction.user.id);

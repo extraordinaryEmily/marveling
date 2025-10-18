@@ -12,28 +12,32 @@ module.exports = {
     const eventIds = Object.keys(events);
     const now = new Date();
 
-    // Filter out past events
-    const activeEventIds = eventIds.filter(id => {
-      const event = events[id];
-      
-      // "Play Now" events are always considered active (they don't have an end time)
-      if (event.type === 'now') {
-        return true;
-      }
-      
-      // For planned events, check if the time has passed
-      if (event.type === 'planned' && event.time) {
+    // Filter out past or expired events
+  const activeEventIds = eventIds.filter(id => {
+    const event = events[id];
+
+    if ((event.type === 'planned' && event.time) || event.type === 'now') {
+      let eventTime;
+
+      if (event.type === 'planned') {
         const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
         if (parsed && parsed.length > 0) {
-          const eventTime = parsed[0].start.date();
-          // Consider event past if it was more than 30 minutes ago (after the event should have started)
-          const eventEndTime = new Date(eventTime.getTime() + 30 * 60 * 1000);
-          return eventEndTime > now;
+          eventTime = parsed[0].start.date();
         }
+      } else if (event.type === 'now') {
+        // Use creation time or current time for "now" events
+        eventTime = new Date(event.time || event.createdAt);
       }
-      
-      return true; // Keep event if we can't determine time
-    });
+
+      if (eventTime) {
+        // Consider event past if it was more than 30 minutes ago (after the event should have started)
+        const eventEndTime = new Date(eventTime.getTime() + 30 * 60 * 1000);
+        return eventEndTime > now;
+      }
+    }
+
+    return true; // Keep event if we can't determine time
+  });
 
     if (activeEventIds.length === 0) {
       return interaction.reply({
