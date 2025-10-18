@@ -22,7 +22,7 @@ const GUILD_ID = '902775580787879997'; // optional (for faster testing)
     console.log(`Started refreshing ${commands.length} application (/) commands.`);
 
     await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), // for testing
+      Routes.applicationCommands(CLIENT_ID), // for testing
       // or Routes.applicationCommands(CLIENT_ID) for global deploy
       { body: commands },
     );
