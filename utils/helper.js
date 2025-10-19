@@ -48,21 +48,23 @@ function isValidDateTime(str) {
  */
 function validateAndAdjustEventTime(timeString) {
   const now = DateTime.now().setZone('America/Los_Angeles');
-  const debugInfo = {
-    input: timeString,
-    currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL),
-  };
+  console.log('\n----------------------');
+  console.log(`🕓 [DEBUG] Starting validation for input: "${timeString}"`);
+  console.log(`📍 Current PST time: ${now.toFormat('fff')}`);
 
-  // Parse the time using PST
+  // Parse input
   const parsedDate = parsePST(timeString);
   if (!parsedDate) {
-    debugInfo.error = 'Failed to parse time string';
-    return { eventTime: null, debugInfo };
+    console.log(`❌ [DEBUG] Failed to parse "${timeString}"`);
+    return { eventTime: null, debugInfo: { input: timeString, error: 'Failed to parse' } };
   }
 
-  // Interpret parsed date as PST
+  console.log(`✅ [DEBUG] Chrono parsed raw JS date (local system time): ${parsedDate.toISOString()}`);
+
+  // Convert parsed date → PST
   let eventTime = DateTime.fromJSDate(parsedDate, { zone: 'America/Los_Angeles' });
-  debugInfo.parsedTimePST = eventTime.toLocaleString(DateTime.DATETIME_FULL);
+  console.log(`🌎 [DEBUG] Interpreted as PST: ${eventTime.toFormat('fff')}`);
+  console.log(`🕒 [DEBUG] Time diff from now: ${(eventTime.diff(now, 'minutes').toObject().minutes).toFixed(1)} minutes`);
 
   // Handle “today” / “tonight” keywords
   const lowerInput = timeString.toLowerCase();
