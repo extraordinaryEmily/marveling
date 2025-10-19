@@ -374,6 +374,7 @@ module.exports = {
   isValidDateTime,
   validateAndAdjustEventTime,
   scheduleReminder,
-  setupRSVPCollector
+  setupRSVPCollector,
+  parsePST
 };
 
