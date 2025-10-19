@@ -13,6 +13,13 @@ const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent } = require('./ac
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 
+// Parses timeString in PST consistently
+function parsePST(timeString) {
+  // Force chrono to interpret the input in PST
+  const parsed = chrono.parse(timeString, new Date(), { timezone: 'America/Los_Angeles' });
+  if (parsed.length === 0) return null;
+  return parsed[0].start.date();
+}
 /**
  * Validates if a string contains a legitimate date/time format.
  */
@@ -43,70 +50,88 @@ function validateAndAdjustEventTime(timeString) {
   const now = DateTime.now().setZone('America/Los_Angeles');
   const debugInfo = {
     input: timeString,
-    currentTime: now.toLocaleString(DateTime.DATETIME_FULL)
+    currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL),
   };
 
-  const parsed = chrono.parse(timeString, new Date());
-  if (!parsed || parsed.length === 0) {
-    debugInfo.error = 'Failed to parse time';
+  // Parse the time using PST
+  const parsedDate = parsePST(timeString);
+  if (!parsedDate) {
+    debugInfo.error = 'Failed to parse time string';
     return { eventTime: null, debugInfo };
   }
 
-  // Convert chrono's JS Date → Luxon DateTime in PST
-  let eventTime = DateTime.fromJSDate(parsed[0].start.date(), { zone: 'utc' }).setZone('America/Los_Angeles');
-  debugInfo.parsedTime = eventTime.toLocaleString(DateTime.DATETIME_FULL);
+  // Interpret parsed date as PST
+  let eventTime = DateTime.fromJSDate(parsedDate, { zone: 'America/Los_Angeles' });
+  debugInfo.parsedTimePST = eventTime.toLocaleString(DateTime.DATETIME_FULL);
 
-  // Handle “today”/“tonight” logic
+  // Handle “today” / “tonight” keywords
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   debugInfo.explicitToday = explicitToday;
 
+  // Handle past times
   if (eventTime < now) {
-    // If user said "today"/"tonight" but time has passed → reject
     if (explicitToday) {
-      debugInfo.action = 'Rejected: User said today but time passed';
+      debugInfo.action = '❌ Rejected — user said today but that time has already passed.';
       return { eventTime: null, debugInfo };
     }
-
-    // Otherwise, assume next week
+    // Otherwise, move to same time next week
     eventTime = eventTime.plus({ days: 7 });
-    debugInfo.action = 'Added 7 days (past time → next week)';
-    debugInfo.adjustedTime = eventTime.toLocaleString(DateTime.DATETIME_FULL);
+    debugInfo.action = '⏩ Adjusted — event was in the past, so added 7 days.';
+    debugInfo.adjustedTimePST = eventTime.toLocaleString(DateTime.DATETIME_FULL);
   } else {
-    debugInfo.action = 'No adjustment needed';
+    debugInfo.action = '✅ No adjustment needed — event time is in the future.';
   }
 
-  // Ensure within 24 days (setTimeout max)
+  // Safety: disallow events >24 days out
   const maxFuture = now.plus({ days: 24 });
   if (eventTime > maxFuture) {
-    debugInfo.error = `Too far in future (${eventTime.diff(now, 'days').toObject().days.toFixed(1)} days ahead)`;
+    const daysAhead = eventTime.diff(now, 'days').toObject().days.toFixed(1);
+    debugInfo.error = `❌ Too far in the future (${daysAhead} days ahead).`;
+    debugInfo.isTooFarInFuture = true;
     return { eventTime: null, debugInfo };
   }
 
-  return { eventTime: eventTime.toJSDate(), debugInfo };
+  // Return both the final UTC date (for scheduling) and debug info
+  const utcDate = eventTime.toUTC().toJSDate();
+  debugInfo.finalEventTimeUTC = eventTime.toUTC().toFormat('fff');
+
+  return { eventTime: utcDate, debugInfo };
 }
 
 /**
  * Schedules a reminder 45 minutes before event time, timezone-safe.
  */
 function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
-  const parsed = chrono.parse(timeString, new Date());
-  if (!parsed || parsed.length === 0) return false;
+  // Parse using chrono-node in PST (America/Los_Angeles)
+  const results = chrono.parse(timeString, new Date(), { timezone: 'America/Los_Angeles' });
+  if (!results || results.length === 0) {
+    console.error(`⚠️ Failed to parse event time: "${timeString}"`);
+    return false;
+  }
 
-  const eventTime = DateTime.fromJSDate(parsed[0].start.date(), { zone: 'utc' }).setZone('America/Los_Angeles');
+  // chrono-node gives UTC date by default; convert it explicitly to PST
+  const eventTime = DateTime.fromJSDate(results[0].start.date(), { zone: 'utc' }).setZone('America/Los_Angeles');
   const reminderTime = eventTime.minus({ minutes: 45 });
   const now = DateTime.now().setZone('America/Los_Angeles');
 
   const delayMs = reminderTime.diff(now).as('milliseconds');
   if (delayMs <= 0) {
-    console.log(`⚠️ Event ${eventId}: reminder already passed`);
+    console.log(`⚠️ Event ${eventId}: reminder already passed (${timeString}, now=${now.toISO()})`);
     return false;
   }
 
   const MAX_TIMEOUT_MS = 2147483647;
-  if (delayMs > MAX_TIMEOUT_MS) return false;
+  if (delayMs > MAX_TIMEOUT_MS) {
+    console.log(`⚠️ Event ${eventId}: reminder too far in future`);
+    return false;
+  }
 
-  console.log(`Event ${eventId} reminder scheduled in ${delayMs}ms (${(delayMs / 3600000).toFixed(2)}h)`);
+  console.log(
+    `⏰ Event ${eventId} reminder set for ${reminderTime.toFormat('fff')} PST (${(delayMs / 60000).toFixed(
+      1
+    )} min from now)`
+  );
 
   const reminderMessages = [
     { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },

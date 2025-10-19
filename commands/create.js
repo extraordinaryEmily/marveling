@@ -19,6 +19,7 @@ const {
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
 const { trackHostCreated, checkMoonKnight, checkWakandaStrategist, trackHostWithTimestamp } = require('../utils/achievementManager');
 const chrono = require('chrono-node');
+const { parsePST } = require('./helper');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -111,7 +112,7 @@ module.exports = {
           achievements.push(...moonKnight);
           
           // Check Wakanda Strategist (20+ days in advance)
-          const parsed = chrono.parse(time, new Date(), { timezone: 'PST' });
+          const parsed = parsePST(timeString);
           if (parsed && parsed.length > 0) {
             const eventTime = parsed[0].start.date();
             const daysInAdvance = (eventTime - Date.now()) / (1000 * 60 * 60 * 24);
