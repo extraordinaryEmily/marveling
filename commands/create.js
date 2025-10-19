@@ -19,7 +19,7 @@ const {
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
 const { trackHostCreated, checkMoonKnight, checkWakandaStrategist, trackHostWithTimestamp } = require('../utils/achievementManager');
 const chrono = require('chrono-node');
-const { parsePST } = require('./helper');
+const { parsePST } = require('../utils/helper');
 
 module.exports = {
   data: new SlashCommandBuilder()
