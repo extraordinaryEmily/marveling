@@ -62,10 +62,8 @@ module.exports = {
 
         msgCollector.on('collect', async m => {
           const time = m.content.trim();
-
           console.log(`🕓 [DEBUG] User input: "${time}"`);
-          
-          // Validate time format
+
           if (!isValidDateTime(time)) {
             await interaction.followUp({
               content: `❌ "${time}" doesn't look valid. Try "today 5PM", "Friday 8PM" or "10/18 5PM".`,
@@ -75,25 +73,16 @@ module.exports = {
           }
 
           // Validate and adjust time
-          const result = validateAndAdjustEventTime(time);
+          const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(time);
+          console.log('📍 [DEBUG] Result debug info:', debugInfo);
 
-          console.log('📍 [DEBUG] Result debug info:', result.debugInfo);
-
-          if (!result.eventTime) {
+          if (!utcDate) {
             let errorMsg;
+            if (debugInfo.isTooFarInFuture) errorMsg = `❌ Too far in the future!`;
+            else if (debugInfo.explicitToday) errorMsg = `❌ That time has already passed today!`;
+            else errorMsg = `❌ Unable to schedule for that time.`;
 
-            if (result.debugInfo.isTooFarInFuture) {
-              errorMsg = `❌ Too far in the future! Events can only be scheduled up to 24 days ahead.`;
-            } else if (result.debugInfo.explicitToday) {
-              errorMsg = `❌ That time has already passed today! (All times are PST)`;
-            } else {
-              errorMsg = `❌ Unable to schedule for that time. Please try a different time.`;
-            }
-
-            await interaction.followUp({
-              content: errorMsg,
-              flags: MessageFlags.Ephemeral
-            });
+            await interaction.followUp({ content: errorMsg, flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -104,28 +93,13 @@ module.exports = {
 
           // Track achievements
           const achievements = trackHostCreated(interaction.user.id);
+          const pstHour = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false });
+          achievements.push(...checkMoonKnight(interaction.user.id, parseInt(pstHour)));
 
-          // Moon Knight achievement (midnight-4am PST)
-          const pstHour = new Date().toLocaleString('en-US', { 
-            timeZone: 'America/Los_Angeles', 
-            hour: 'numeric', 
-            hour12: false 
-          });
-          const hour = parseInt(pstHour);
-          const moonKnight = checkMoonKnight(interaction.user.id, hour);
-          achievements.push(...moonKnight);
+          const daysInAdvance = (utcDate - Date.now()) / (1000 * 60 * 60 * 24);
+          achievements.push(...checkWakandaStrategist(interaction.user.id, daysInAdvance));
+          achievements.push(...trackHostWithTimestamp(interaction.user.id));
 
-          // Wakanda Strategist (20+ days in advance)
-          const parsed = parsePST(time); // ✅ use 'time', not 'timeString'
-          if (parsed) {
-            const eventTime = parsed;
-            const daysInAdvance = (eventTime - Date.now()) / (1000 * 60 * 60 * 24);
-            const wakanda = checkWakandaStrategist(interaction.user.id, daysInAdvance);
-            achievements.push(...wakanda);
-          }
-          // Track host frequency (5 in 7 days)
-          const againAchievement = trackHostWithTimestamp(interaction.user.id);
-          achievements.push(...againAchievement);
           if (achievements.length > 0) {
             const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
             await interaction.followUp({ content: achievementText });
@@ -155,7 +129,8 @@ module.exports = {
         });
 
         msgCollector.on('end', c => {
-          if (c.size === 0) interaction.followUp({ content: '⏰ Timed out. Try `/create` again.', flags: MessageFlags.Ephemeral });
+          if (c.size === 0)
+            interaction.followUp({ content: '⏰ Timed out. Try `/create` again.', flags: MessageFlags.Ephemeral });
         });
       }
 

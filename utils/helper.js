@@ -111,34 +111,40 @@ function validateAndAdjustEventTime(timeString) {
  * Schedules a reminder 45 minutes before event time, timezone-safe.
  */
 function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
-  // Parse using chrono-node in PST (America/Los_Angeles)
-  const results = chrono.parse(timeString, new Date(), { timezone: 'America/Los_Angeles' });
-  if (!results || results.length === 0) {
-    console.error(`⚠️ Failed to parse event time: "${timeString}"`);
+  // Use validateAndAdjustEventTime to get a clean, PST-consistent date
+  const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(timeString);
+
+  if (!utcDate) {
+    console.error(`⚠️ Event ${eventId}: invalid time, cannot schedule reminder. Debug info:`, debugInfo);
     return false;
   }
 
-  // chrono-node gives UTC date by default; convert it explicitly to PST
-  const eventTime = DateTime.fromJSDate(results[0].start.date(), { zone: 'utc' }).setZone('America/Los_Angeles');
+  // Interpret the UTC JS date as PST for reminder calculation
+  const eventTime = DateTime.fromJSDate(utcDate).setZone('America/Los_Angeles');
   const reminderTime = eventTime.minus({ minutes: 45 });
   const now = DateTime.now().setZone('America/Los_Angeles');
 
   const delayMs = reminderTime.diff(now).as('milliseconds');
+
+  console.log('🕓 [DEBUG] Scheduling reminder');
+  console.log('📍 Event time (PST):', eventTime.toLocaleString(DateTime.DATETIME_FULL));
+  console.log('⏱ Reminder time (PST):', reminderTime.toLocaleString(DateTime.DATETIME_FULL));
+  console.log('📍 Current time (PST):', now.toLocaleString(DateTime.DATETIME_FULL));
+  console.log('🕒 Delay (ms):', delayMs);
+
   if (delayMs <= 0) {
     console.log(`⚠️ Event ${eventId}: reminder already passed (${timeString}, now=${now.toISO()})`);
     return false;
   }
 
-  const MAX_TIMEOUT_MS = 2147483647;
+  const MAX_TIMEOUT_MS = 2147483647; // Node.js setTimeout max
   if (delayMs > MAX_TIMEOUT_MS) {
-    console.log(`⚠️ Event ${eventId}: reminder too far in future`);
+    console.log(`⚠️ Event ${eventId}: reminder too far in the future, cannot schedule`);
     return false;
   }
 
   console.log(
-    `⏰ Event ${eventId} reminder set for ${reminderTime.toFormat('fff')} PST (${(delayMs / 60000).toFixed(
-      1
-    )} min from now)`
+    `⏰ Event ${eventId}: reminder set for ${reminderTime.toFormat('fff')} PST (${(delayMs / 60000).toFixed(1)} min from now)`
   );
 
   const reminderMessages = [
