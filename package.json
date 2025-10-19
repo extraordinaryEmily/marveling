@@ -8,13 +8,18 @@
     "deploy": "node deploy-commands.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["discord", "bot", "marvel-rivals"],
+  "keywords": [
+    "discord",
+    "bot",
+    "marvel-rivals"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "chrono-node": "^2.9.0",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "luxon": "^3.7.2"
   }
 }

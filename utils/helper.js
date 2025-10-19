@@ -11,6 +11,7 @@ const {
 } = require('./eventManager');
 const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent } = require('./achievementManager');
 const chrono = require('chrono-node');
+const { DateTime } = require('luxon');
 
 /**
  * Validates if a string contains a legitimate date/time format.
@@ -39,149 +40,74 @@ function isValidDateTime(str) {
  * Returns { eventTime, debugInfo } or { eventTime: null, debugInfo } if invalid.
  */
 function validateAndAdjustEventTime(timeString) {
-  const now = new Date();
+  const now = DateTime.now().setZone('America/Los_Angeles');
   const debugInfo = {
     input: timeString,
-    currentTime: now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' })
+    currentTime: now.toLocaleString(DateTime.DATETIME_FULL)
   };
-  
-  const parsed = chrono.parse(timeString, new Date(), { timezone: 'PST' });
+
+  const parsed = chrono.parse(timeString, new Date());
   if (!parsed || parsed.length === 0) {
     debugInfo.error = 'Failed to parse time';
     return { eventTime: null, debugInfo };
   }
-  
-  let eventTime = parsed[0].start.date();
-  debugInfo.parsedTime = eventTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' });
-  debugInfo.isInPast = eventTime <= now;
-  
-  // Check if user explicitly said "today" or "tonight"
+
+  // Convert chrono's JS Date → Luxon DateTime in PST
+  let eventTime = DateTime.fromJSDate(parsed[0].start.date(), { zone: 'utc' }).setZone('America/Los_Angeles');
+  debugInfo.parsedTime = eventTime.toLocaleString(DateTime.DATETIME_FULL);
+
+  // Handle “today”/“tonight” logic
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   debugInfo.explicitToday = explicitToday;
-  
-  // Validate that parsed day matches input (chrono sometimes fails on abbreviations like "tues")
-  const dayNames = {
-    'sunday': 0, 'sun': 0,
-    'monday': 1, 'mon': 1,
-    'tuesday': 2, 'tue': 2, 'tues': 2,
-    'wednesday': 3, 'wed': 3,
-    'thursday': 4, 'thu': 4, 'thurs': 4,
-    'friday': 5, 'fri': 5,
-    'saturday': 6, 'sat': 6
-  };
-  
-  // Check if user specified a day name
-  const inputDay = Object.keys(dayNames).find(day => lowerInput.includes(day));
-  if (inputDay && !explicitToday) {
-    const expectedDayNum = dayNames[inputDay];
-    const parsedDayNum = eventTime.getDay();
-    
-    debugInfo.inputDayName = inputDay;
-    debugInfo.expectedDayNum = expectedDayNum;
-    debugInfo.parsedDayNum = parsedDayNum;
-    
-    // If parsed day doesn't match input day, manually set it
-    if (parsedDayNum !== expectedDayNum) {
-      debugInfo.dayMismatch = true;
-      
-      // Calculate days until the target day
-      let daysUntil = expectedDayNum - parsedDayNum;
-      if (daysUntil <= 0) daysUntil += 7; // Go to next week if day already passed
-      
-      eventTime = new Date(eventTime.getTime() + daysUntil * 24 * 60 * 60 * 1000);
-      debugInfo.correctedTime = eventTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' });
-      debugInfo.parsedTime = debugInfo.correctedTime; // Update parsedTime to show corrected time
+
+  if (eventTime < now) {
+    // If user said "today"/"tonight" but time has passed → reject
+    if (explicitToday) {
+      debugInfo.action = 'Rejected: User said today but time passed';
+      return { eventTime: null, debugInfo };
     }
+
+    // Otherwise, assume next week
+    eventTime = eventTime.plus({ days: 7 });
+    debugInfo.action = 'Added 7 days (past time → next week)';
+    debugInfo.adjustedTime = eventTime.toLocaleString(DateTime.DATETIME_FULL);
+  } else {
+    debugInfo.action = 'No adjustment needed';
   }
-  
-  // Re-check if time is in the past after correction
-  debugInfo.isInPast = eventTime <= now;
-  
-  // Check if event is too far in the future (max 24 days due to setTimeout limitation)
-  const MAX_DAYS_AHEAD = 24;
-  const maxFutureTime = new Date(now.getTime() + (MAX_DAYS_AHEAD * 24 * 60 * 60 * 1000));
-  const daysAhead = Math.ceil((eventTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (eventTime > maxFutureTime) {
-    debugInfo.isTooFarInFuture = true;
-    debugInfo.daysAhead = daysAhead;
-    debugInfo.maxDaysAllowed = MAX_DAYS_AHEAD;
-    debugInfo.error = `Event is too far in the future (${daysAhead} days ahead, max is ${MAX_DAYS_AHEAD} days)`;
+
+  // Ensure within 24 days (setTimeout max)
+  const maxFuture = now.plus({ days: 24 });
+  if (eventTime > maxFuture) {
+    debugInfo.error = `Too far in future (${eventTime.diff(now, 'days').toObject().days.toFixed(1)} days ahead)`;
     return { eventTime: null, debugInfo };
   }
-  
-  debugInfo.isTooFarInFuture = false;
-  debugInfo.daysAhead = daysAhead;
-  
-  // If parsed time is in the past
-  if (eventTime <= now) {
-    // Check if it's today
-    const eventDate = new Date(eventTime);
-    const nowDate = new Date(now);
-    const isSameDay = eventDate.getFullYear() === nowDate.getFullYear() &&
-                      eventDate.getMonth() === nowDate.getMonth() &&
-                      eventDate.getDate() === nowDate.getDate();
-    
-    debugInfo.isSameDay = isSameDay;
-    
-    // If user explicitly said "today" or "tonight" and time is past, reject it
-    if (explicitToday && eventTime <= now) {
-      debugInfo.action = 'Rejected: User said "today" but time has passed';
-      return { eventTime: null, debugInfo };
-    }
-    
-    // Otherwise, add 7 days (user said a day name, not "today")
-    eventTime = new Date(eventTime.getTime() + 7 * 24 * 60 * 60 * 1000);
-    debugInfo.action = isSameDay ? 'Added 7 days (same day, past time → next week)' : 'Added 7 days (past day → next week)';
-    debugInfo.adjustedTime = eventTime.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', dateStyle: 'full', timeStyle: 'short' });
-    
-    // If still in the past after adding a week, return null
-    if (eventTime <= now) {
-      debugInfo.error = 'Still in past after adding 7 days';
-      return { eventTime: null, debugInfo };
-    }
-  } else {
-    debugInfo.action = 'No adjustment needed (future time)';
-  }
-  
-  return { eventTime, debugInfo };
+
+  return { eventTime: eventTime.toJSDate(), debugInfo };
 }
 
 /**
- * Schedules a reminder 45 minutes before the event time.
- * Uses PST timezone for parsing.
+ * Schedules a reminder 45 minutes before event time, timezone-safe.
  */
 function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
-  // Parse the time string with PST timezone context
-  const parsed = chrono.parse(timeString, new Date(), { timezone: 'PST' });
-  
-  if (!parsed || parsed.length === 0) {
-    return false;
-  }
-  
-  const eventTime = parsed[0].start.date();
-  const reminderTime = new Date(eventTime.getTime() - 45 * 60 * 1000); // 45 minutes before
-  const now = new Date();
-  
-  // Only schedule if reminder time is in the future
-  if (reminderTime <= now) {
-    return false;
-  }
-  
-  const delayMs = reminderTime.getTime() - now.getTime();
-  
-  // Safety check: JavaScript setTimeout has a max delay of ~24.8 days (2^31 - 1 milliseconds)
-  // This should never trigger since we prevent events >24 days, but kept as a safety net
-  const MAX_TIMEOUT_MS = 2147483647; // Max 32-bit signed integer
-  
-  if (delayMs > MAX_TIMEOUT_MS) {
+  const parsed = chrono.parse(timeString, new Date());
+  if (!parsed || parsed.length === 0) return false;
+
+  const eventTime = DateTime.fromJSDate(parsed[0].start.date(), { zone: 'utc' }).setZone('America/Los_Angeles');
+  const reminderTime = eventTime.minus({ minutes: 45 });
+  const now = DateTime.now().setZone('America/Los_Angeles');
+
+  const delayMs = reminderTime.diff(now).as('milliseconds');
+  if (delayMs <= 0) {
+    console.log(`⚠️ Event ${eventId}: reminder already passed`);
     return false;
   }
 
-  console.log(`Event ${eventId} reminder scheduled in ${delayMs}ms`);
-  
-  // Randomized reminder messages
+  const MAX_TIMEOUT_MS = 2147483647;
+  if (delayMs > MAX_TIMEOUT_MS) return false;
+
+  console.log(`Event ${eventId} reminder scheduled in ${delayMs}ms (${(delayMs / 3600000).toFixed(2)}h)`);
+
   const reminderMessages = [
     { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
     { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
@@ -191,34 +117,32 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
     { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
   ];
-  
-  // Schedule the reminder
+
   const timeoutId = setTimeout(async () => {
     const event = getEvent(eventId);
     if (!event) return;
-    
+
     const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
     const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
-    
+
     const embed = new EmbedBuilder()
       .setColor(0xffa500)
       .setTitle(randomMsg.title)
       .setDescription(randomMsg.desc)
       .setImage('https://giffiles.alphacoders.com/223/223284.gif')
-      .addFields(
-        { name: 'Event ID', value: `#${eventId}` }
-      );
-    
+      .addFields({ name: 'Event ID', value: `#${eventId}` });
+
     await channel.send({
       content: attendeeMentions ? `⏰ ${attendeeMentions}` : `⏰ ${rolePing}`,
       embeds: [embed],
       allowedMentions: { parse: ['users', 'roles'] }
     });
   }, delayMs);
-  
+
   setReminder(eventId, timeoutId, channel.id, null);
   return true;
 }
+
 
 /**
  * Sets up RSVP reaction collectors and handles automatic reschedule prompts.
