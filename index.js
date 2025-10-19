@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Collection, Partials, MessageFlags } = requir
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const { getAllEvents } = require('./utils/eventManager');
 
 const client = new Client({
   intents: [
