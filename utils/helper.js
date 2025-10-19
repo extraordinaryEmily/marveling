@@ -62,7 +62,7 @@ function validateAndAdjustEventTime(timeString) {
   console.log(`✅ [DEBUG] Chrono parsed raw JS date (local system time): ${parsedDate.toISOString()}`);
 
   // Convert parsed date → PST
-  let eventTime = DateTime.fromJSDate(parsedDate, { zone: 'America/Los_Angeles' });
+  let eventTime = DateTime.fromJSDate(parsedDate).setZone('America/Los_Angeles', { keepLocalTime: true });
   console.log(`🌎 [DEBUG] Interpreted as PST: ${eventTime.toFormat('fff')}`);
   console.log(`🕒 [DEBUG] Time diff from now: ${(eventTime.diff(now, 'minutes').toObject().minutes).toFixed(1)} minutes`);
 

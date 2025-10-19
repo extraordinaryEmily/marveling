@@ -63,6 +63,8 @@ module.exports = {
 
         msgCollector.on('collect', async m => {
           const time = m.content.trim();
+
+          console.log(`🕓 [DEBUG] User input: "${time}"`);
           
           // Validate time format
           if (!isValidDateTime(time)) {
@@ -72,13 +74,15 @@ module.exports = {
             });
             return;
           }
-          
-          // Validate and adjust time (adds 7 days if time is in the past)
+
+          // Validate and adjust time
           const result = validateAndAdjustEventTime(time);
-          
+
+          console.log('📍 [DEBUG] Result debug info:', result.debugInfo);
+
           if (!result.eventTime) {
             let errorMsg;
-            
+
             if (result.debugInfo.isTooFarInFuture) {
               errorMsg = `❌ Too far in the future! Events can only be scheduled up to 24 days ahead.`;
             } else if (result.debugInfo.explicitToday) {
@@ -86,7 +90,7 @@ module.exports = {
             } else {
               errorMsg = `❌ Unable to schedule for that time. Please try a different time.`;
             }
-            
+
             await interaction.followUp({
               content: errorMsg,
               flags: MessageFlags.Ephemeral
@@ -96,12 +100,13 @@ module.exports = {
 
           msgCollector.stop();
           await m.delete().catch(() => {});
+
           const id = createEvent(interaction.user.id, 'planned', time);
-          
+
           // Track achievements
           const achievements = trackHostCreated(interaction.user.id);
-          
-          // Check Moon Knight (midnight-4am PST)
+
+          // Moon Knight achievement (midnight-4am PST)
           const pstHour = new Date().toLocaleString('en-US', { 
             timeZone: 'America/Los_Angeles', 
             hour: 'numeric', 
@@ -110,30 +115,25 @@ module.exports = {
           const hour = parseInt(pstHour);
           const moonKnight = checkMoonKnight(interaction.user.id, hour);
           achievements.push(...moonKnight);
-          
-          // Check Wakanda Strategist (20+ days in advance)
-          const parsed = parsePST(timeString);
-          if (parsed && parsed.length > 0) {
-            const eventTime = parsed[0].start.date();
+
+          // Wakanda Strategist (20+ days in advance)
+          const parsed = parsePST(time); // ✅ use 'time', not 'timeString'
+          if (parsed) {
+            const eventTime = parsed;
             const daysInAdvance = (eventTime - Date.now()) / (1000 * 60 * 60 * 24);
             const wakanda = checkWakandaStrategist(interaction.user.id, daysInAdvance);
             achievements.push(...wakanda);
           }
-          
           // Track host frequency (5 in 7 days)
           const againAchievement = trackHostWithTimestamp(interaction.user.id);
           achievements.push(...againAchievement);
-          
           if (achievements.length > 0) {
             const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
-            await interaction.followUp({
-              content: achievementText
-            });
+            await interaction.followUp({ content: achievementText });
           }
-          
-          if (role) {
-            role.members.forEach(member => addInvited(id, member.id));
-          }
+
+          // Invite members
+          if (role) role.members.forEach(member => addInvited(id, member.id));
           addInvited(id, interaction.user.id);
 
           const embed = new EmbedBuilder()
@@ -152,8 +152,6 @@ module.exports = {
 
           for (const e of ['✅', '🤔', '❌', '🔁']) await msg.react(e);
           setupRSVPCollector(msg, interaction, rolePing, id, role, 'planned', time);
-          
-          // Schedule reminder (fires 45 minutes before event)
           scheduleReminder(id, time, interaction.channel, rolePing, interaction.user);
         });
 
