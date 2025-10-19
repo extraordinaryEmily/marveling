@@ -66,6 +66,12 @@ function validateAndAdjustEventTime(timeString) {
   console.log(`🌎 [DEBUG] Interpreted as PST: ${eventTime.toFormat('fff')}`);
   console.log(`🕒 [DEBUG] Time diff from now: ${(eventTime.diff(now, 'minutes').toObject().minutes).toFixed(1)} minutes`);
 
+  const debugInfo = {
+    input: timeString,
+    currentTimePST: now.toFormat('fff'),
+    parsedTimePST: eventTime.toFormat('fff')
+  };
+
   // Handle “today” / “tonight” keywords
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
