@@ -42,6 +42,13 @@ function parsePST(timeString) {
 
   // Interpret that parsed JS date as a wall-clock PST time
   const pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
+  // 🔧 PATCH: Fix Chrono "day ahead" issue
+  const lowerInput = timeString.toLowerCase();
+  const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
+  if (explicitToday && pstDt.day === now.plus({ days: 1 }).day) {
+    console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
+    pstDt = pstDt.minus({ days: 1 });
+  }
   console.log('🕐 Reinterpreted as PST:', pstDt.toFormat('fff'));
 
   const backToUtc = pstDt.toUTC();
@@ -101,14 +108,6 @@ function validateAndAdjustEventTime(timeString) {
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   debugInfo.explicitToday = explicitToday;
-
-  // 🩹 PATCH: Fix Chrono “day ahead” issue
-  const pstParsed = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
-  const pstNow = now;
-  if (explicitToday && pstParsed.day === pstNow.plus({ days: 1 }).day) {
-    console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
-    parsedUtcDate = pstParsed.minus({ days: 1 }).toUTC().toJSDate();
-  }
 
   let finalEventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
 
