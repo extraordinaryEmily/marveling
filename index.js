@@ -81,31 +81,51 @@ function keepAlive() {
   }
 
   setInterval(() => {
-    // Ping every 14 minutes (840000 ms)
-    // Log the time left for each event's reminder
     const now = new Date();
     const events = getAllEvents();
     for (const eventId in events) {
       const event = events[eventId];
-      if (event.reminderTimeoutId) {
-        const reminderTime = new Date(event.reminderTimeoutId);
-        const timeLeft = reminderTime.getTime() - now.getTime();
-        console.log(`Event ${eventId} reminder in ${timeLeft}ms`);
+
+      // ✅ Only proceed if this event actually has a reminder set
+      if (event.reminderTimeoutId && event.reminderTime) {
+        try {
+          const reminderTime = new Date(event.reminderTime);
+
+          if (isNaN(reminderTime.getTime())) {
+            console.warn(`⚠️ Event ${eventId} has invalid reminderTime:`, event.reminderTime);
+            continue;
+          }
+
+          const timeLeft = reminderTime.getTime() - now.getTime();
+          const minsLeft = (timeLeft / 60000).toFixed(1);
+
+          // ✅ Show whether reminder already fired or still pending
+          if (timeLeft > 0) {
+            console.log(`⏳ Event ${eventId} reminder in ${minsLeft} minutes (${timeLeft}ms)`);
+          } else {
+            console.log(`⚠️ Event ${eventId} reminder already passed ${Math.abs(minsLeft)} minutes ago`);
+          }
+
+        } catch (err) {
+          console.error(`❌ Error reading reminderTime for event ${eventId}:`, err);
+        }
       }
     }
-    
-    // Log the active events
     const activeEventIds = Object.keys(events).filter(id => {
-      const event = events[id];
-      return event.reminderTimeoutId || event.type === 'now';
+      const e = events[id];
+      return e.reminderTimeoutId || e.type === 'now';
     });
-    console.log(`Active events: ${activeEventIds.join(', ')}`);
-    
+    if (activeEventIds.length > 0) {
+      console.log(`📋 Active events: ${activeEventIds.join(', ')}`);
+    } else {
+      console.log('📭 No active events currently scheduled.');
+    }
     fetch(RENDER_URL + '/health')
       .then(res => res.json())
       .then(data => console.log('✅ Keep-alive ping successful:', data.timestamp))
       .catch(err => console.error('❌ Keep-alive ping failed:', err.message));
-  }, 14 * 60 * 1000); // 14 minutes
+
+  }, 14 * 60 * 1000); // every 14 minutes
 }
 
 // Start keep-alive after bot is ready
