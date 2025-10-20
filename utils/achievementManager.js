@@ -275,6 +275,12 @@ const LEGENDARY_ACHIEVEMENTS = {
     emoji: '👁️',
     name: 'EYE OF AGAMOTTO',
     description: 'Reschedule the same event 5+ times'
+  },
+  AVENGERS_ASSEMBLE: {
+    id: 'AVENGERS_ASSEMBLE',
+    emoji: '🦅',
+    name: 'AVENGERS ASSEMBLE',
+    description: 'Everyone with @rivaling tag RSVPs to an event'
   }
 };
 
@@ -470,6 +476,44 @@ function trackReschedule(userId, oldEventId, newEventId) {
   return [];
 }
 
+// Check for Avengers Assemble achievement (everyone with @rivaling tag RSVPs)
+// Returns array of { userId, achievements } for all users who earned the achievement
+function checkAvengersAssemble(event) {
+  if (!event || !event.invited || !event.attendees) return [];
+  
+  // Need at least 2 people (excluding creator) for this achievement
+  if (event.invited.length < 3) return [];
+  
+  // Check if all invited users (except creator) have RSVPed
+  const nonCreatorInvited = event.invited.filter(userId => userId !== event.creatorId);
+  const allRSVPed = nonCreatorInvited.every(userId => event.attendees.includes(userId));
+  
+  // Also check if the creator RSVPed (for "Play Now" events they might RSVP too)
+  const creatorRSVPed = event.attendees.includes(event.creatorId);
+  
+  // Everyone needs to have RSVPed
+  if (!allRSVPed || !creatorRSVPed) return [];
+  
+  const achievementId = LEGENDARY_ACHIEVEMENTS.AVENGERS_ASSEMBLE.id;
+  const newAchievements = [];
+  
+  // Award to all attendees who don't have it yet
+  event.attendees.forEach(userId => {
+    ensureUser(userId);
+    const stats = getUserStats(userId);
+    
+    if (!stats.achievements.includes(achievementId)) {
+      stats.achievements.push(achievementId);
+      newAchievements.push({
+        userId,
+        achievements: [LEGENDARY_ACHIEVEMENTS.AVENGERS_ASSEMBLE]
+      });
+    }
+  });
+  
+  return newAchievements;
+}
+
 module.exports = {
   getUserStats,
   trackHostCreated,
@@ -487,6 +531,7 @@ module.exports = {
   clearEventCredits,
   processEventNonResponders,
   trackReschedule,
+  checkAvengersAssemble,
   ACHIEVEMENT_TIERS,
   LEGENDARY_ACHIEVEMENTS
 };

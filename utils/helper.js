@@ -9,7 +9,7 @@ const {
   createEvent,
   addInvited
 } = require('./eventManager');
-const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits, processEventNonResponders, trackReschedule } = require('./achievementManager');
+const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits, processEventNonResponders, trackReschedule, checkAvengersAssemble } = require('./achievementManager');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 /**
@@ -250,6 +250,17 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         if (worthyAchievements.length > 0) {
           const worthyText = worthyAchievements.map(a => `<@${event.creatorId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
           msg.channel.send(worthyText).catch(() => {});
+        }
+      }
+      
+      // Check for Avengers Assemble achievement (everyone RSVPs)
+      if (event) {
+        const avengersAchievements = checkAvengersAssemble(event);
+        if (avengersAchievements.length > 0) {
+          const avengersText = avengersAchievements.map(({ userId, achievements }) => 
+            achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n')
+          ).join('\n');
+          msg.channel.send(avengersText).catch(() => {});
         }
       }
     }
