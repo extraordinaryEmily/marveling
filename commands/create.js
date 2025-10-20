@@ -62,7 +62,6 @@ module.exports = {
 
         msgCollector.on('collect', async m => {
           const time = m.content.trim();
-          console.log(`🕓 [DEBUG] User input: "${time}"`);
 
           if (!isValidDateTime(time)) {
             await interaction.followUp({
@@ -74,7 +73,6 @@ module.exports = {
 
           // Validate and adjust time
           const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(time);
-          console.log('📍 [DEBUG] Result debug info:', debugInfo);
 
           if (!utcDate) {
             let errorMsg;

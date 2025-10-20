@@ -19,28 +19,20 @@ const { DateTime } = require('luxon');
  * Returns null if parse fails.
  */
 function parsePST(timeString) {
-  console.log('\n🧭 [parsePST] -------------------------------');
-  console.log('🧩 Input:', timeString);
-
   // Base reference date in PST
   const ourTime = DateTime.now().setZone('America/Los_Angeles');
-  console.log('📍 Base PST reference:', ourTime.toFormat('fff'));
 
   // Create a date with PST calendar values in the server's local timezone
   // This ensures Chrono calculates relative dates (tomorrow, next week, etc.) correctly
   const baseJs = new Date(ourTime.year, ourTime.month - 1, ourTime.day, ourTime.hour, ourTime.minute, ourTime.second);
-  // console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
 
   // Chrono parsing (relative to base date)
   const results = chrono.parse(timeString, baseJs);
   if (!results || results.length === 0) {
-    console.log('❌ [parsePST] No parse results');
     return null;
   }
 
   const parsedJsDate = results[0].start.date();
-  // console.log('🧮 Chrono returned JS Date (system local timezone):', parsedJsDate.toISOString());
-  // console.log('🧾 Chrono components:', results[0].start.knownValues);
 
   // Interpret that parsed JS date as a wall-clock PST time
   let pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
@@ -48,15 +40,10 @@ function parsePST(timeString) {
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   if (explicitToday && pstDt.day === ourTime.plus({ days: 1 }).day) {
-    console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
     pstDt = pstDt.minus({ days: 1 });
   }
-  console.log('🕐 Reinterpreted as PST:', pstDt.toFormat('fff'));
 
   const backToUtc = pstDt.toUTC();
-  // console.log('🌎 Converted to UTC:', backToUtc.toFormat('fff'));
-  console.log('🧭 [parsePST] Done -------------------------------\n');
-
   return backToUtc.toJSDate();
 }
 
@@ -90,9 +77,8 @@ function validateAndAdjustEventTime(timeString) {
   const now = DateTime.now().setZone('America/Los_Angeles');
   const debugInfo = { input: timeString, currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL) };
 
-  console.log('\n----------------------');
-  console.log(`🕓 [DEBUG] Starting validation for input: "${timeString}"`);
-  console.log(`📍 Current PST time: ${now.toFormat('fff')}`);
+  console.log('\n🕓 Validating event time: "' + timeString + '"');
+  console.log('📍 Current time: ' + now.toFormat('MMM dd h:mm a') + ' PST');
 
   // Use parsePST to get a UTC JS Date that corresponds to the PST wall-clock
   let parsedUtcDate = parsePST(timeString);
@@ -102,10 +88,6 @@ function validateAndAdjustEventTime(timeString) {
   }
 
   const eventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles', { keepLocalTime: false });
-  console.log(`🌎 Parsed PST time: ${eventTime.toFormat('fff')}`);
-
-  const diffMin = eventTime.diff(now, 'minutes').toObject().minutes.toFixed(1);
-  console.log(`🕒 Diff from now: ${diffMin} minutes`);
 
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
@@ -117,10 +99,12 @@ function validateAndAdjustEventTime(timeString) {
   if (finalEventTime < now) {
     if (explicitToday) {
       debugInfo.action = '❌ Rejected — user said today but that time has passed.';
+      console.log('❌ That time has already passed today!');
       return { eventTime: null, debugInfo };
     }
     finalEventTime = finalEventTime.plus({ days: 7 });
     debugInfo.action = '⏩ Adjusted — event was in the past, so added 7 days.';
+    console.log('⏩ Time was in the past, added 7 days');
   } else {
     debugInfo.action = '✅ No adjustment needed — event time is in the future.';
   }
@@ -136,8 +120,7 @@ function validateAndAdjustEventTime(timeString) {
   const utcDate = finalEventTime.toUTC().toJSDate();
   debugInfo.finalEventTimeUTC = finalEventTime.toUTC().toFormat('fff');
 
-  console.log(`✅ Final UTC time: ${finalEventTime.toUTC().toFormat('fff')}`);
-  console.log(`🕓 Action: ${debugInfo.action}`);
+  console.log('✅ Event set for: ' + finalEventTime.toFormat('EEE MMM dd h:mm a') + ' PST');
 
   return { eventTime: utcDate, debugInfo };
 }
@@ -149,7 +132,7 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(timeString);
 
   if (!utcDate) {
-    console.error(`⚠️ Event ${eventId}: invalid time, cannot schedule reminder. Debug info:`, debugInfo);
+    console.error(`⚠️ Event ${eventId}: invalid time, cannot schedule reminder`);
     return false;
   }
 
@@ -159,14 +142,8 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
 
   const delayMs = reminderTime.diff(now).as('milliseconds');
 
-  console.log('🕓 [DEBUG] Scheduling reminder');
-  console.log('📍 Event time (PST):', eventTime.toLocaleString(DateTime.DATETIME_FULL));
-  console.log('⏱ Reminder time (PST):', reminderTime.toLocaleString(DateTime.DATETIME_FULL));
-  console.log('📍 Current time (PST):', now.toLocaleString(DateTime.DATETIME_FULL));
-  console.log('🕒 Delay (ms):', delayMs);
-
   if (delayMs <= 0) {
-    console.log(`⚠️ Event ${eventId}: reminder already passed (${timeString}, now=${now.toISO()})`);
+    console.log(`⚠️ Event ${eventId}: reminder time has already passed`);
     return false;
   }
 
@@ -176,9 +153,7 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     return false;
   }
 
-  console.log(
-    `⏰ Event ${eventId}: reminder set for ${reminderTime.toFormat('fff')} PST (${(delayMs / 60000).toFixed(1)} min from now)`
-  );
+  console.log('⏰ Reminder set for: ' + reminderTime.toFormat('EEE MMM dd h:mm a') + ' PST\n');
 
   const reminderMessages = [
     { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
@@ -190,13 +165,13 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
   ];
 
-  // ✅ NEW: Store the reminder date in your event object before creating the timeout
+  // Store the reminder date in the event object
   const event = getEvent(eventId);
   if (event) {
-    event.reminderTime = reminderTime.toISO(); // <-- Add this line
+    event.reminderTime = reminderTime.toISO();
   }
 
-  // Then schedule the timeout
+  // Schedule the timeout
   const timeoutId = setTimeout(async () => {
     const event = getEvent(eventId);
     if (!event) return;
