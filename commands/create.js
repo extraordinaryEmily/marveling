@@ -18,6 +18,7 @@ const {
 } = require('../utils/eventManager');
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector, parsePST } = require('../utils/helper');
 const { trackHostCreated, checkMoonKnight, checkWakandaStrategist, trackHostWithTimestamp } = require('../utils/achievementManager');
+const { registerCommandState, completeUserCommand } = require('../utils/commandStateManager');
 const chrono = require('chrono-node');
 
 module.exports = {
@@ -35,16 +36,29 @@ module.exports = {
       new ButtonBuilder().setCustomId('plan_game_night').setLabel('Plan Game Night').setEmoji('📅').setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.reply({ content: 'Play now or later?', components: [buttons], flags: MessageFlags.Ephemeral });
+    const reply = await interaction.reply({ 
+      content: 'Play now or later?', 
+      components: [buttons], 
+      flags: MessageFlags.Ephemeral,
+      fetchReply: true 
+    });
 
-    const collector = interaction.channel.createMessageComponentCollector({
-      filter: i => i.user.id === interaction.user.id,
+    const collector = reply.createMessageComponentCollector({
+      filter: i => i.user.id === interaction.user.id && (i.customId === 'play_now' || i.customId === 'plan_game_night'),
       max: 1,
       time: 20000
     });
 
+    // Register this command state to cancel any previous commands
+    registerCommandState(interaction.user.id, 'create', { buttonCollector: collector });
+
     collector.on('collect', async btn => {
-      await btn.deferUpdate();
+      try {
+        await btn.deferUpdate();
+      } catch (error) {
+        console.error('Error deferring button update:', error);
+        return;
+      }
 
       // ===============================
       // PLAN GAME NIGHT FLOW
@@ -59,6 +73,9 @@ module.exports = {
           filter: m => m.author.id === interaction.user.id,
           time: 60000
         });
+
+        // Update command state with message collector
+        registerCommandState(interaction.user.id, 'create', { messageCollector: msgCollector });
 
         msgCollector.on('collect', async m => {
           const time = m.content.trim();
@@ -124,11 +141,19 @@ module.exports = {
           for (const e of ['✅', '🤔', '❌', '🔁']) await msg.react(e);
           setupRSVPCollector(msg, interaction, rolePing, id, role, 'planned', time);
           scheduleReminder(id, time, interaction.channel, rolePing, interaction.user);
+          
+          // Command completed successfully
+          completeUserCommand(interaction.user.id);
         });
 
-        msgCollector.on('end', c => {
-          if (c.size === 0)
-            interaction.followUp({ content: '⏰ Timed out. Try `/create` again.', flags: MessageFlags.Ephemeral });
+        msgCollector.on('end', (c, reason) => {
+          if (c.size === 0 && reason === 'time') {
+            interaction.followUp({ 
+              content: '⏰ Timed out. Try `/create` again.', 
+              flags: MessageFlags.Ephemeral 
+            }).catch(err => console.error('Error sending timeout message:', err));
+            completeUserCommand(interaction.user.id);
+          }
         });
       }
 
@@ -184,12 +209,24 @@ module.exports = {
 
         for (const e of ['✅', '❌']) await msg.react(e);
         setupRSVPCollector(msg, interaction, rolePing, id, role, 'now');
+        
+        // Command completed successfully
+        completeUserCommand(interaction.user.id);
       }
     });
 
-    collector.on('end', collected => {
-      if (collected.size === 0)
-        interaction.editReply({ content: '⏰ No response. Command cancelled.', components: [] });
+    collector.on('end', async (collected, reason) => {
+      if (collected.size === 0 && reason === 'time') {
+        try {
+          await interaction.editReply({ 
+            content: '⏰ No response. Command cancelled.', 
+            components: [] 
+          });
+        } catch (error) {
+          console.error('Error editing reply on timeout:', error);
+        }
+        completeUserCommand(interaction.user.id);
+      }
     });
   }
 };

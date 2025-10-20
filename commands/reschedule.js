@@ -7,6 +7,8 @@ const {
   cancelReminder
 } = require('../utils/eventManager');
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
+const { clearEventCredits, processEventNonResponders } = require('../utils/achievementManager');
+const { registerCommandState, completeUserCommand } = require('../utils/commandStateManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -57,6 +59,9 @@ module.exports = {
       time: 60000
     });
 
+    // Register this command state to cancel any previous commands
+    registerCommandState(interaction.user.id, 'reschedule', { messageCollector: msgCollector });
+
     msgCollector.on('collect', async m => {
       const input = m.content.trim();
 
@@ -68,6 +73,7 @@ module.exports = {
           content: '🛑 Reschedule cancelled.',
           flags: MessageFlags.Ephemeral
         });
+        completeUserCommand(interaction.user.id);
         return;
       }
 
@@ -101,8 +107,12 @@ module.exports = {
       const role = interaction.guild.roles.cache.find(r => r.name === 'rivaling');
       const rolePing = role ? `<@&${role.id}>` : '@rivaling';
 
+      // Process non-responders before deleting the event
+      const nonResponderAchievements = processEventNonResponders(event);
+
       // Cancel old reminder and delete old event
       cancelReminder(eventId);
+      clearEventCredits(eventId);
       const oldInvited = [...event.invited];
       deleteEvent(eventId);
 
@@ -133,6 +143,17 @@ module.exports = {
 
       // Schedule new reminder
       scheduleReminder(newId, input, interaction.channel, rolePing, interaction.user);
+
+      // Send achievement notifications for non-responders
+      if (nonResponderAchievements.length > 0) {
+        for (const { userId, achievements } of nonResponderAchievements) {
+          const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+          await interaction.channel.send(achievementText).catch(() => {});
+        }
+      }
+      
+      // Command completed successfully
+      completeUserCommand(interaction.user.id);
     });
 
     msgCollector.on('end', (collected, reason) => {
@@ -140,7 +161,8 @@ module.exports = {
         interaction.followUp({ 
           content: '⏰ Timed out. Try `/reschedule` again.', 
           flags: MessageFlags.Ephemeral 
-        });
+        }).catch(err => console.error('Error sending timeout message:', err));
+        completeUserCommand(interaction.user.id);
       }
     });
   }

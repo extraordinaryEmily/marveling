@@ -391,7 +391,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
           interaction.followUp({
             content: '⌛ Reschedule timed out.',
             flags: MessageFlags.Ephemeral
-          });
+          }).catch(err => console.error('Error sending timeout message:', err));
         }
       });
     }
