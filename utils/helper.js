@@ -9,7 +9,7 @@ const {
   createEvent,
   addInvited
 } = require('./eventManager');
-const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits } = require('./achievementManager');
+const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits, processEventNonResponders } = require('./achievementManager');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 /**
@@ -334,11 +334,23 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         await m.delete().catch(() => {});
         msgCollector.stop('reschedule');
 
+        // Process non-responders before deleting the event
+        const event = getEvent(id);
+        const nonResponderAchievements = processEventNonResponders(event);
+
         // Cancel old reminder and delete old event and message
         cancelReminder(id);
         clearEventCredits(id);
         deleteEvent(id);
         await msg.delete().catch(() => {});
+        
+        // Send achievement notifications for non-responders
+        if (nonResponderAchievements.length > 0) {
+          for (const { userId, achievements } of nonResponderAchievements) {
+            const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+            await interaction.channel.send(achievementText).catch(() => {});
+          }
+        }
 
         // Create new event
         const newId = createEvent(interaction.user.id, 'planned', input);

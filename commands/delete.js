@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { deleteEvent, getEvent, cancelReminder } = require('../utils/eventManager');
-const { clearEventCredits } = require('../utils/achievementManager');
+const { clearEventCredits, processEventNonResponders } = require('../utils/achievementManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -25,11 +25,23 @@ module.exports = {
       return interaction.reply({ content: `🚫 You're not allowed to delete this event.`, flags: MessageFlags.Ephemeral });
     }
 
+    // Process non-responders before deleting the event
+    const nonResponderAchievements = processEventNonResponders(event);
+    
     // Cancel any scheduled reminders
     cancelReminder(id);
     // Clear achievement tracking for this event
     clearEventCredits(id);
     deleteEvent(id);
+    
     await interaction.reply(`🗑️ Event #${id} has been deleted.`);
+    
+    // Send achievement notifications for non-responders
+    if (nonResponderAchievements.length > 0) {
+      for (const { userId, achievements } of nonResponderAchievements) {
+        const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+        await interaction.followUp({ content: achievementText });
+      }
+    }
   },
 };

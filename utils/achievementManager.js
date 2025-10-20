@@ -15,6 +15,7 @@ function ensureUser(userId) {
       maybeCount: 0,
       fastRSVPs: 0,
       worthyEvents: 0,
+      noResponseCount: 0,
       recentHostTimestamps: [],
       achievements: []
     };
@@ -258,6 +259,12 @@ const LEGENDARY_ACHIEVEMENTS = {
     emoji: '⚡',
     name: 'WORTHY',
     description: 'Host 3 events where 5+ people RSVP'
+  },
+  CLOAKS_SHADOW: {
+    id: 'CLOAKS_SHADOW',
+    emoji: '👻',
+    name: "CLOAK'S SHADOW",
+    description: 'No response for 50 events you were invited to'
   }
 };
 
@@ -380,6 +387,53 @@ function getLegendaryAchievements(userId) {
   );
 }
 
+// Track no-response for Cloak's Shadow achievement
+function trackNoResponse(userId) {
+  ensureUser(userId);
+  userStats[userId].noResponseCount++;
+  
+  const stats = getUserStats(userId);
+  const achievementId = LEGENDARY_ACHIEVEMENTS.CLOAKS_SHADOW.id;
+  
+  if (stats.noResponseCount >= 5 && !stats.achievements.includes(achievementId)) {
+    stats.achievements.push(achievementId);
+    return [LEGENDARY_ACHIEVEMENTS.CLOAKS_SHADOW];
+  }
+  return [];
+}
+
+// Process event completion and check for non-responders
+// This should be called when an event is deleted or expires
+function processEventNonResponders(event) {
+  if (!event || !event.invited) return [];
+  
+  const newAchievements = []; // Array of { userId, achievements }
+  
+  // Get all users who responded to this event
+  const responders = new Set();
+  if (eventAchievementCredits[event.id]) {
+    Object.keys(eventAchievementCredits[event.id]).forEach(userId => {
+      responders.add(userId);
+    });
+  }
+  
+  // Check each invited user to see if they responded
+  event.invited.forEach(userId => {
+    // Skip the event creator (they don't need to RSVP to their own event)
+    if (userId === event.creatorId) return;
+    
+    // If user didn't respond, track it
+    if (!responders.has(userId)) {
+      const achievements = trackNoResponse(userId);
+      if (achievements.length > 0) {
+        newAchievements.push({ userId, achievements });
+      }
+    }
+  });
+  
+  return newAchievements;
+}
+
 module.exports = {
   getUserStats,
   trackHostCreated,
@@ -395,6 +449,7 @@ module.exports = {
   trackWorthyEvent,
   getLegendaryAchievements,
   clearEventCredits,
+  processEventNonResponders,
   ACHIEVEMENT_TIERS,
   LEGENDARY_ACHIEVEMENTS
 };
