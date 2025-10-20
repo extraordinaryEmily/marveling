@@ -7,7 +7,7 @@ const {
   cancelReminder
 } = require('../utils/eventManager');
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
-const { clearEventCredits, processEventNonResponders } = require('../utils/achievementManager');
+const { clearEventCredits, processEventNonResponders, trackReschedule } = require('../utils/achievementManager');
 const { registerCommandState, completeUserCommand } = require('../utils/commandStateManager');
 
 module.exports = {
@@ -120,6 +120,9 @@ module.exports = {
       const newId = createEvent(interaction.user.id, 'planned', input);
       oldInvited.forEach(userId => addInvited(newId, userId));
 
+      // Track reschedule and check for Eye of Agamotto achievement
+      const rescheduleAchievements = trackReschedule(interaction.user.id, eventId, newId);
+
       // Send new event message
       const newEmbed = new EmbedBuilder()
         .setColor(0x00ff88)
@@ -150,6 +153,14 @@ module.exports = {
           const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
           await interaction.channel.send(achievementText).catch(() => {});
         }
+      }
+
+      // Send achievement notification for reschedule achievement
+      if (rescheduleAchievements.length > 0) {
+        const achievementText = rescheduleAchievements.map(a => 
+          `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`
+        ).join('\n');
+        await interaction.channel.send(achievementText).catch(() => {});
       }
       
       // Command completed successfully

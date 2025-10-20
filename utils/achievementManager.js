@@ -5,6 +5,10 @@ let userStats = {};
 // Structure: { eventId: { userId: Set<'rsvp' | 'maybe' | 'fastRSVP'> } }
 let eventAchievementCredits = {};
 
+// Track reschedule counts for events
+// Structure: { eventId: rescheduleCount }
+let eventRescheduleCount = {};
+
 // Initialize user stats if they don't exist
 function ensureUser(userId) {
   if (!userStats[userId]) {
@@ -265,6 +269,12 @@ const LEGENDARY_ACHIEVEMENTS = {
     emoji: '👻',
     name: "CLOAK'S SHADOW",
     description: 'No response for 50 events you were invited to'
+  },
+  EYE_OF_AGAMOTTO: {
+    id: 'EYE_OF_AGAMOTTO',
+    emoji: '👁️',
+    name: 'EYE OF AGAMOTTO',
+    description: 'Reschedule the same event 5+ times'
   }
 };
 
@@ -434,6 +444,32 @@ function processEventNonResponders(event) {
   return newAchievements;
 }
 
+// Track event reschedule and check for Eye of Agamotto achievement
+function trackReschedule(userId, oldEventId, newEventId) {
+  ensureUser(userId);
+  
+  // Get the current reschedule count for the old event
+  const currentCount = eventRescheduleCount[oldEventId] || 0;
+  const newCount = currentCount + 1;
+  
+  // Store the count for the new event ID
+  eventRescheduleCount[newEventId] = newCount;
+  
+  // Clean up the old event's count
+  delete eventRescheduleCount[oldEventId];
+  
+  // Check if user earned the Eye of Agamotto achievement
+  const stats = getUserStats(userId);
+  const achievementId = LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO.id;
+  
+  if (newCount >= 3 && !stats.achievements.includes(achievementId)) {
+    stats.achievements.push(achievementId);
+    return [LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO];
+  }
+  
+  return [];
+}
+
 module.exports = {
   getUserStats,
   trackHostCreated,
@@ -450,6 +486,7 @@ module.exports = {
   getLegendaryAchievements,
   clearEventCredits,
   processEventNonResponders,
+  trackReschedule,
   ACHIEVEMENT_TIERS,
   LEGENDARY_ACHIEVEMENTS
 };
