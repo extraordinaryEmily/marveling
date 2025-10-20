@@ -3,7 +3,9 @@ const { Client, GatewayIntentBits, Collection, Partials, MessageFlags } = requir
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { getAllEvents } = require('./utils/eventManager');
+const { getAllEvents, deleteEvent, cancelReminder } = require('./utils/eventManager');
+const { processEventNonResponders, clearEventCredits } = require('./utils/achievementManager');
+const chrono = require('chrono-node');
 
 const client = new Client({
   intents: [
@@ -128,8 +130,77 @@ function keepAlive() {
   }, 14 * 60 * 1000); // every 14 minutes
 }
 
+// ========================================
+// Auto-Cleanup for Old Events
+// ========================================
+function cleanupOldEvents() {
+  const now = new Date();
+  const events = getAllEvents();
+  let cleanedCount = 0;
+  
+  for (const eventId in events) {
+    const event = events[eventId];
+    
+    // Check if this is a "Play Now" event or a planned event
+    if (event.type === 'now' || event.type === 'planned') {
+      let eventTime;
+      
+      if (event.type === 'planned' && event.time) {
+        const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
+        if (parsed && parsed.length > 0) {
+          eventTime = parsed[0].start.date();
+        }
+      } else if (event.type === 'now') {
+        // Use creation time for "now" events
+        eventTime = new Date(event.time || event.createdAt);
+      }
+      
+      if (eventTime) {
+        // Check if event is older than 30 minutes
+        const eventEndTime = new Date(eventTime.getTime() + 30 * 60 * 1000);
+        
+        if (eventEndTime <= now) {
+          console.log(`🧹 Auto-cleaning old event #${eventId} (${event.type})`);
+          
+          // Process non-responders BEFORE deleting
+          const nonResponderAchievements = processEventNonResponders(event);
+          
+          // Log if any achievements were awarded
+          if (nonResponderAchievements.length > 0) {
+            console.log(`👻 Cloak's Shadow progress tracked for ${nonResponderAchievements.length} non-responder(s) on event #${eventId}`);
+            
+            // Send achievement notifications if bot is ready
+            nonResponderAchievements.forEach(({ userId, achievements }) => {
+              achievements.forEach(achievement => {
+                console.log(`  ✨ User ${userId} unlocked ${achievement.emoji} ${achievement.name}!`);
+              });
+            });
+          }
+          
+          // Clean up the event
+          cancelReminder(eventId);
+          clearEventCredits(eventId);
+          deleteEvent(eventId);
+          cleanedCount++;
+        }
+      }
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`✅ Cleaned up ${cleanedCount} old event(s)`);
+  }
+}
+
+// Run cleanup every 5 minutes
+setInterval(cleanupOldEvents, 5 * 60 * 1000);
+
 // Start keep-alive after bot is ready
 client.once('clientReady', () => {
   keepAlive();
   console.log('🔄 Keep-alive service started');
+  console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
+  
+  // Run cleanup immediately on startup
+  cleanupOldEvents();
 });

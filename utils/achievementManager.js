@@ -355,10 +355,13 @@ function trackHostWithTimestamp(userId) {
   const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
   stats.recentHostTimestamps = stats.recentHostTimestamps.filter(t => t > sevenDaysAgo);
   
+  console.log(`[AGAIN_X5] User ${userId} has hosted ${stats.recentHostTimestamps.length} events in last 7 days`);
+  
   const achievementId = LEGENDARY_ACHIEVEMENTS.AGAIN_X5.id;
   
   if (stats.recentHostTimestamps.length >= 5 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    console.log(`[AGAIN_X5] ✅ Achievement unlocked for user ${userId}!`);
     return [LEGENDARY_ACHIEVEMENTS.AGAIN_X5];
   }
   return [];
