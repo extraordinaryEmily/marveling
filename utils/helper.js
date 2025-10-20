@@ -111,7 +111,6 @@ function validateAndAdjustEventTime(timeString) {
  * Schedules a reminder 45 minutes before event time, timezone-safe.
  */
 function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
-  // Use validateAndAdjustEventTime to get a clean, PST-consistent date
   const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(timeString);
 
   if (!utcDate) {
@@ -119,7 +118,6 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     return false;
   }
 
-  // Interpret the UTC JS date as PST for reminder calculation
   const eventTime = DateTime.fromJSDate(utcDate).setZone('America/Los_Angeles');
   const reminderTime = eventTime.minus({ minutes: 45 });
   const now = DateTime.now().setZone('America/Los_Angeles');
@@ -137,7 +135,7 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     return false;
   }
 
-  const MAX_TIMEOUT_MS = 2147483647; // Node.js setTimeout max
+  const MAX_TIMEOUT_MS = 2147483647;
   if (delayMs > MAX_TIMEOUT_MS) {
     console.log(`⚠️ Event ${eventId}: reminder too far in the future, cannot schedule`);
     return false;
@@ -157,6 +155,13 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
   ];
 
+  // ✅ NEW: Store the reminder date in your event object before creating the timeout
+  const event = getEvent(eventId);
+  if (event) {
+    event.reminderTime = reminderTime.toISO(); // <-- Add this line
+  }
+
+  // Then schedule the timeout
   const timeoutId = setTimeout(async () => {
     const event = getEvent(eventId);
     if (!event) return;
@@ -181,7 +186,6 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   setReminder(eventId, timeoutId, channel.id, null);
   return true;
 }
-
 
 /**
  * Sets up RSVP reaction collectors and handles automatic reschedule prompts.
