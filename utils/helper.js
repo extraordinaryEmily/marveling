@@ -27,7 +27,7 @@ function parsePST(timeString) {
   console.log('📍 Base PST reference:', basePst.toFormat('fff'));
 
   const baseJs = basePst.toJSDate();
-  console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
+  // console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
 
   // Chrono parsing (relative to base date)
   const results = chrono.parse(timeString, baseJs);
@@ -37,15 +37,15 @@ function parsePST(timeString) {
   }
 
   const parsedJsDate = results[0].start.date();
-  console.log('🧮 Chrono returned JS Date (system local timezone):', parsedJsDate.toISOString());
-  console.log('🧾 Chrono components:', results[0].start.knownValues);
+  // console.log('🧮 Chrono returned JS Date (system local timezone):', parsedJsDate.toISOString());
+  // console.log('🧾 Chrono components:', results[0].start.knownValues);
 
   // Interpret that parsed JS date as a wall-clock PST time
   const pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
-  console.log('🕐 Reinterpreted as PST (keepLocalTime=true):', pstDt.toFormat('fff'));
+  console.log('🕐 Reinterpreted as PST:', pstDt.toFormat('fff'));
 
   const backToUtc = pstDt.toUTC();
-  console.log('🌎 Converted to UTC:', backToUtc.toFormat('fff'));
+  // console.log('🌎 Converted to UTC:', backToUtc.toFormat('fff'));
   console.log('🧭 [parsePST] Done -------------------------------\n');
 
   return backToUtc.toJSDate();
@@ -92,51 +92,51 @@ function validateAndAdjustEventTime(timeString) {
     return { eventTime: null, debugInfo };
   }
 
-  console.log(`✅ [DEBUG] Chrono parsed raw JS date (local system time): ${parsedUtcDate.toISOString()}`);
+  const eventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles', { keepLocalTime: false });
+  console.log(`🌎 Parsed PST time: ${eventTime.toFormat('fff')}`);
 
-  // Convert parsed date → PST
-  let eventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles', { keepLocalTime: false });
-  console.log(`🌎 [DEBUG] Interpreted as PST: ${eventTime.toFormat('fff')}`);
-  console.log(`🕒 [DEBUG] Time diff from now: ${(eventTime.diff(now, 'minutes').toObject().minutes).toFixed(1)} minutes`);
+  const diffMin = eventTime.diff(now, 'minutes').toObject().minutes.toFixed(1);
+  console.log(`🕒 Diff from now: ${diffMin} minutes`);
 
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   debugInfo.explicitToday = explicitToday;
 
-  // 🩹 PATCH: Fix Chrono “day ahead” issue in PST for "today"/"tonight"
+  // 🩹 PATCH: Fix Chrono “day ahead” issue
   const pstParsed = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
   const pstNow = now;
-
   if (explicitToday && pstParsed.day === pstNow.plus({ days: 1 }).day) {
-    console.log('🔧 [FIX] Chrono advanced a day ahead of PST — subtracting 1 day.');
+    console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
     parsedUtcDate = pstParsed.minus({ days: 1 }).toUTC().toJSDate();
-    eventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles', { keepLocalTime: false });
   }
 
+  let finalEventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
+
   // Handle past times
-  if (eventTime < now) {
+  if (finalEventTime < now) {
     if (explicitToday) {
-      debugInfo.action = '❌ Rejected — user said today but that time has already passed.';
+      debugInfo.action = '❌ Rejected — user said today but that time has passed.';
       return { eventTime: null, debugInfo };
     }
-    eventTime = eventTime.plus({ days: 7 });
+    finalEventTime = finalEventTime.plus({ days: 7 });
     debugInfo.action = '⏩ Adjusted — event was in the past, so added 7 days.';
-    debugInfo.adjustedTimePST = eventTime.toLocaleString(DateTime.DATETIME_FULL);
   } else {
     debugInfo.action = '✅ No adjustment needed — event time is in the future.';
   }
 
   // Safety: disallow events >24 days out
   const maxFuture = now.plus({ days: 24 });
-  if (eventTime > maxFuture) {
-    const daysAhead = eventTime.diff(now, 'days').toObject().days.toFixed(1);
+  if (finalEventTime > maxFuture) {
+    const daysAhead = finalEventTime.diff(now, 'days').toObject().days.toFixed(1);
     debugInfo.error = `❌ Too far in the future (${daysAhead} days ahead).`;
-    debugInfo.isTooFarInFuture = true;
     return { eventTime: null, debugInfo };
   }
 
-  const utcDate = eventTime.toUTC().toJSDate();
-  debugInfo.finalEventTimeUTC = eventTime.toUTC().toFormat('fff');
+  const utcDate = finalEventTime.toUTC().toJSDate();
+  debugInfo.finalEventTimeUTC = finalEventTime.toUTC().toFormat('fff');
+
+  console.log(`✅ Final UTC time: ${finalEventTime.toUTC().toFormat('fff')}`);
+  console.log(`🕓 Action: ${debugInfo.action}`);
 
   return { eventTime: utcDate, debugInfo };
 }
