@@ -9,7 +9,7 @@ const {
   createEvent,
   addInvited
 } = require('./eventManager');
-const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits, processEventNonResponders } = require('./achievementManager');
+const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits, processEventNonResponders, trackReschedule } = require('./achievementManager');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 /**
@@ -360,6 +360,9 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         }
         addInvited(newId, interaction.user.id);
 
+        // Track reschedule and check for Eye of Agamotto achievement
+        const rescheduleAchievements = trackReschedule(interaction.user.id, id, newId);
+
         // Send new event message
         const newEmbed = new EmbedBuilder()
           .setColor(0x00ff88)
@@ -383,6 +386,14 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         
         // Schedule new reminder
         scheduleReminder(newId, input, interaction.channel, rolePing, interaction.user);
+
+        // Send achievement notification for reschedule achievement
+        if (rescheduleAchievements.length > 0) {
+          const achievementText = rescheduleAchievements.map(a => 
+            `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`
+          ).join('\n');
+          await interaction.channel.send(achievementText).catch(() => {});
+        }
 
       });
 
