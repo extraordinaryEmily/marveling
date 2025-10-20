@@ -23,10 +23,10 @@ function parsePST(timeString) {
   console.log('🧩 Input:', timeString);
 
   // Base reference date in PST
-  const basePst = DateTime.now().setZone('America/Los_Angeles');
-  console.log('📍 Base PST reference:', basePst.toFormat('fff'));
+  const now = DateTime.now().setZone('America/Los_Angeles');
+  console.log('📍 Base PST reference:', now.toFormat('fff'));
 
-  const baseJs = basePst.toJSDate();
+  const baseJs = now.toJSDate();
   // console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
 
   // Chrono parsing (relative to base date)
