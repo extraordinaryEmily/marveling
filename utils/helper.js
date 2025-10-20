@@ -12,7 +12,32 @@ const {
 const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent } = require('./achievementManager');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
+/**
+ * Parse timeString relative to PST and return a JS Date (UTC) that represents the
+ * PST wall-clock time (suitable for scheduling).
+ *
+ * Returns null if parse fails.
+ */
+function parsePST(timeString) {
+  // Create a base date that represents "now" in PST
+  const basePst = DateTime.now().setZone('America/Los_Angeles').toJSDate();
 
+  // Ask chrono to parse relative to that PST base date
+  const results = chrono.parse(timeString, basePst);
+  if (!results || results.length === 0) return null;
+
+  // Chrono returns a JS Date (results[0].start.date()) in your system timezone.
+  // We want to interpret the *local fields* (year, month, day, hour, minute)
+  // of that parsed date as PST. So create a Luxon DateTime from the JS Date
+  // and set zone to America/Los_Angeles while keeping the same wall-clock (local) time.
+  const parsedJsDate = results[0].start.date();
+
+  // Use keepLocalTime to avoid shifting the hour by timezone offset.
+  const pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
+
+  // Return the UTC JS Date corresponding to that PST wall-clock moment.
+  return pstDt.toUTC().toJSDate();
+}
 function validateAndAdjustEventTime(timeString) {
   const now = DateTime.now().setZone('America/Los_Angeles');
   const debugInfo = { input: timeString, currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL) };
