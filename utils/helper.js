@@ -19,25 +19,38 @@ const { DateTime } = require('luxon');
  * Returns null if parse fails.
  */
 function parsePST(timeString) {
-  // Create a base date that represents "now" in PST
-  const basePst = DateTime.now().setZone('America/Los_Angeles').toJSDate();
+  console.log('\n🧭 [parsePST] -------------------------------');
+  console.log('🧩 Input:', timeString);
 
-  // Ask chrono to parse relative to that PST base date
-  const results = chrono.parse(timeString, basePst);
-  if (!results || results.length === 0) return null;
+  // Base reference date in PST
+  const basePst = DateTime.now().setZone('America/Los_Angeles');
+  console.log('📍 Base PST reference:', basePst.toFormat('fff'));
 
-  // Chrono returns a JS Date (results[0].start.date()) in your system timezone.
-  // We want to interpret the *local fields* (year, month, day, hour, minute)
-  // of that parsed date as PST. So create a Luxon DateTime from the JS Date
-  // and set zone to America/Los_Angeles while keeping the same wall-clock (local) time.
+  const baseJs = basePst.toJSDate();
+  console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
+
+  // Chrono parsing (relative to base date)
+  const results = chrono.parse(timeString, baseJs);
+  if (!results || results.length === 0) {
+    console.log('❌ [parsePST] No parse results');
+    return null;
+  }
+
   const parsedJsDate = results[0].start.date();
+  console.log('🧮 Chrono returned JS Date (system local timezone):', parsedJsDate.toISOString());
+  console.log('🧾 Chrono components:', results[0].start.knownValues);
 
-  // Use keepLocalTime to avoid shifting the hour by timezone offset.
+  // Interpret that parsed JS date as a wall-clock PST time
   const pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
+  console.log('🕐 Reinterpreted as PST (keepLocalTime=true):', pstDt.toFormat('fff'));
 
-  // Return the UTC JS Date corresponding to that PST wall-clock moment.
-  return pstDt.toUTC().toJSDate();
+  const backToUtc = pstDt.toUTC();
+  console.log('🌎 Converted to UTC:', backToUtc.toFormat('fff'));
+  console.log('🧭 [parsePST] Done -------------------------------\n');
+
+  return backToUtc.toJSDate();
 }
+
 function validateAndAdjustEventTime(timeString) {
   const now = DateTime.now().setZone('America/Los_Angeles');
   const debugInfo = { input: timeString, currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL) };
