@@ -51,64 +51,6 @@ function parsePST(timeString) {
   return backToUtc.toJSDate();
 }
 
-function validateAndAdjustEventTime(timeString) {
-  const now = DateTime.now().setZone('America/Los_Angeles');
-  const debugInfo = { input: timeString, currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL) };
-
-  console.log('\n----------------------');
-  console.log(`🕓 [DEBUG] Starting validation for input: "${timeString}"`);
-  console.log(`📍 Current PST time: ${now.toFormat('fff')}`);
-
-  // Use parsePST to get a UTC JS Date that corresponds to the PST wall-clock
-  const parsedUtcDate = parsePST(timeString);
-  if (!parsedUtcDate) {
-    debugInfo.error = 'Failed to parse time string';
-    return { eventTime: null, debugInfo };
-  }
-
-  // ✅ FIXED variable name
-  console.log(`✅ [DEBUG] Chrono parsed raw JS date (local system time): ${parsedUtcDate.toISOString()}`);
-
-  // Convert parsed date → PST
-  let eventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles', { keepLocalTime: false });
-  console.log(`🌎 [DEBUG] Interpreted as PST: ${eventTime.toFormat('fff')}`);
-  console.log(`🕒 [DEBUG] Time diff from now: ${(eventTime.diff(now, 'minutes').toObject().minutes).toFixed(1)} minutes`);
-
-  // Handle “today” / “tonight” keywords
-  const lowerInput = timeString.toLowerCase();
-  const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
-  debugInfo.explicitToday = explicitToday;
-
-  // Handle past times
-  if (eventTime < now) {
-    if (explicitToday) {
-      debugInfo.action = '❌ Rejected — user said today but that time has already passed.';
-      return { eventTime: null, debugInfo };
-    }
-    // Otherwise, move to same time next week
-    eventTime = eventTime.plus({ days: 7 });
-    debugInfo.action = '⏩ Adjusted — event was in the past, so added 7 days.';
-    debugInfo.adjustedTimePST = eventTime.toLocaleString(DateTime.DATETIME_FULL);
-  } else {
-    debugInfo.action = '✅ No adjustment needed — event time is in the future.';
-  }
-
-  // Safety: disallow events >24 days out
-  const maxFuture = now.plus({ days: 24 });
-  if (eventTime > maxFuture) {
-    const daysAhead = eventTime.diff(now, 'days').toObject().days.toFixed(1);
-    debugInfo.error = `❌ Too far in the future (${daysAhead} days ahead).`;
-    debugInfo.isTooFarInFuture = true;
-    return { eventTime: null, debugInfo };
-  }
-
-  // Return both the final UTC date (for scheduling) and debug info
-  const utcDate = eventTime.toUTC().toJSDate();
-  debugInfo.finalEventTimeUTC = eventTime.toUTC().toFormat('fff');
-
-  return { eventTime: utcDate, debugInfo };
-}
-
 /**
  * Validates if a string contains a legitimate date/time format.
  */
@@ -144,13 +86,12 @@ function validateAndAdjustEventTime(timeString) {
   console.log(`📍 Current PST time: ${now.toFormat('fff')}`);
 
   // Use parsePST to get a UTC JS Date that corresponds to the PST wall-clock
-  const parsedUtcDate = parsePST(timeString);
+  let parsedUtcDate = parsePST(timeString);
   if (!parsedUtcDate) {
     debugInfo.error = 'Failed to parse time string';
     return { eventTime: null, debugInfo };
   }
 
-  // ✅ FIXED variable name
   console.log(`✅ [DEBUG] Chrono parsed raw JS date (local system time): ${parsedUtcDate.toISOString()}`);
 
   // Convert parsed date → PST
@@ -158,10 +99,19 @@ function validateAndAdjustEventTime(timeString) {
   console.log(`🌎 [DEBUG] Interpreted as PST: ${eventTime.toFormat('fff')}`);
   console.log(`🕒 [DEBUG] Time diff from now: ${(eventTime.diff(now, 'minutes').toObject().minutes).toFixed(1)} minutes`);
 
-  // Handle “today” / “tonight” keywords
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   debugInfo.explicitToday = explicitToday;
+
+  // 🩹 PATCH: Fix Chrono “day ahead” issue in PST for "today"/"tonight"
+  const pstParsed = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
+  const pstNow = now;
+
+  if (explicitToday && pstParsed.day === pstNow.plus({ days: 1 }).day) {
+    console.log('🔧 [FIX] Chrono advanced a day ahead of PST — subtracting 1 day.');
+    parsedUtcDate = pstParsed.minus({ days: 1 }).toUTC().toJSDate();
+    eventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles', { keepLocalTime: false });
+  }
 
   // Handle past times
   if (eventTime < now) {
@@ -169,7 +119,6 @@ function validateAndAdjustEventTime(timeString) {
       debugInfo.action = '❌ Rejected — user said today but that time has already passed.';
       return { eventTime: null, debugInfo };
     }
-    // Otherwise, move to same time next week
     eventTime = eventTime.plus({ days: 7 });
     debugInfo.action = '⏩ Adjusted — event was in the past, so added 7 days.';
     debugInfo.adjustedTimePST = eventTime.toLocaleString(DateTime.DATETIME_FULL);
@@ -186,7 +135,6 @@ function validateAndAdjustEventTime(timeString) {
     return { eventTime: null, debugInfo };
   }
 
-  // Return both the final UTC date (for scheduling) and debug info
   const utcDate = eventTime.toUTC().toJSDate();
   debugInfo.finalEventTimeUTC = eventTime.toUTC().toFormat('fff');
 
