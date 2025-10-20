@@ -26,7 +26,9 @@ function parsePST(timeString) {
   const ourTime = DateTime.now().setZone('America/Los_Angeles');
   console.log('📍 Base PST reference:', ourTime.toFormat('fff'));
 
-  const baseJs = ourTime.toJSDate();
+  // Create a date with PST calendar values in the server's local timezone
+  // This ensures Chrono calculates relative dates (tomorrow, next week, etc.) correctly
+  const baseJs = new Date(ourTime.year, ourTime.month - 1, ourTime.day, ourTime.hour, ourTime.minute, ourTime.second);
   // console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
 
   // Chrono parsing (relative to base date)
