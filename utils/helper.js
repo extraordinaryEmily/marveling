@@ -41,7 +41,7 @@ function parsePST(timeString) {
   // console.log('🧾 Chrono components:', results[0].start.knownValues);
 
   // Interpret that parsed JS date as a wall-clock PST time
-  const pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
+  let pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
   // 🔧 PATCH: Fix Chrono "day ahead" issue
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
