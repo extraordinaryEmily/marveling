@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { deleteEvent, getEvent, cancelReminder } = require('../utils/eventManager');
+const { clearEventCredits } = require('../utils/achievementManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,6 +27,8 @@ module.exports = {
 
     // Cancel any scheduled reminders
     cancelReminder(id);
+    // Clear achievement tracking for this event
+    clearEventCredits(id);
     deleteEvent(id);
     await interaction.reply(`🗑️ Event #${id} has been deleted.`);
   },

@@ -9,7 +9,7 @@ const {
   createEvent,
   addInvited
 } = require('./eventManager');
-const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent } = require('./achievementManager');
+const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits } = require('./achievementManager');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 /**
@@ -231,15 +231,15 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
     if (reaction.emoji.name === '✅') {
       addAttendee(id, user.id);
       
-      // Track RSVP achievement (only for Available)
-      const rsvpAchievements = trackRSVP(user.id);
+      // Track RSVP achievement (only for Available) - pass eventId to prevent farming
+      const rsvpAchievements = trackRSVP(user.id, id);
       achievements.push(...rsvpAchievements);
       
       // Check for fast RSVP (within 30 seconds, not your own event)
       if (event && user.id !== event.creatorId) {
         const timeSinceCreation = (Date.now() - event.createdAt) / 1000; // seconds
         if (timeSinceCreation <= 30) {
-          const bullseyeAchievements = trackFastRSVP(user.id);
+          const bullseyeAchievements = trackFastRSVP(user.id, id);
           achievements.push(...bullseyeAchievements);
         }
       }
@@ -257,8 +257,8 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
       removeAttendee(id, user.id);
     }
     else if (reaction.emoji.name === '🤔') {
-      // Track Maybe responses
-      const maybeAchievements = trackMaybe(user.id);
+      // Track Maybe responses - pass eventId to prevent farming
+      const maybeAchievements = trackMaybe(user.id, id);
       achievements.push(...maybeAchievements);
     }
     
@@ -336,6 +336,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
 
         // Cancel old reminder and delete old event and message
         cancelReminder(id);
+        clearEventCredits(id);
         deleteEvent(id);
         await msg.delete().catch(() => {});
 

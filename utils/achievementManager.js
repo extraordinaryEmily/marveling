@@ -1,6 +1,10 @@
 // Achievement tracking system for Marvel Rivals Bot
 let userStats = {};
 
+// Track which users have been credited for which events to prevent farming
+// Structure: { eventId: { userId: Set<'rsvp' | 'maybe' | 'fastRSVP'> } }
+let eventAchievementCredits = {};
+
 // Initialize user stats if they don't exist
 function ensureUser(userId) {
   if (!userStats[userId]) {
@@ -15,6 +19,29 @@ function ensureUser(userId) {
       achievements: []
     };
   }
+}
+
+// Check if user has already been credited for this achievement type on this event
+function hasBeenCredited(eventId, userId, achievementType) {
+  if (!eventAchievementCredits[eventId]) return false;
+  if (!eventAchievementCredits[eventId][userId]) return false;
+  return eventAchievementCredits[eventId][userId].has(achievementType);
+}
+
+// Mark user as credited for this achievement type on this event
+function markAsCredited(eventId, userId, achievementType) {
+  if (!eventAchievementCredits[eventId]) {
+    eventAchievementCredits[eventId] = {};
+  }
+  if (!eventAchievementCredits[eventId][userId]) {
+    eventAchievementCredits[eventId][userId] = new Set();
+  }
+  eventAchievementCredits[eventId][userId].add(achievementType);
+}
+
+// Clean up event tracking when event is deleted/completed
+function clearEventCredits(eventId) {
+  delete eventAchievementCredits[eventId];
 }
 
 // Get user stats
@@ -38,9 +65,20 @@ function trackInviteSent(userId, count = 1) {
 }
 
 // Track when user RSVPs to an event
-function trackRSVP(userId) {
+function trackRSVP(userId, eventId = null) {
+  // If eventId is provided, check if user has already been credited
+  if (eventId && hasBeenCredited(eventId, userId, 'rsvp')) {
+    return []; // Already credited for this event
+  }
+  
   ensureUser(userId);
   userStats[userId].rsvpsMade++;
+  
+  // Mark as credited for this event
+  if (eventId) {
+    markAsCredited(eventId, userId, 'rsvp');
+  }
+  
   return checkResponderAchievements(userId);
 }
 
@@ -248,9 +286,19 @@ function checkWakandaStrategist(userId, daysInAdvance) {
 }
 
 // Track "Maybe" responses
-function trackMaybe(userId) {
+function trackMaybe(userId, eventId = null) {
+  // If eventId is provided, check if user has already been credited
+  if (eventId && hasBeenCredited(eventId, userId, 'maybe')) {
+    return []; // Already credited for this event
+  }
+  
   ensureUser(userId);
   userStats[userId].maybeCount++;
+  
+  // Mark as credited for this event
+  if (eventId) {
+    markAsCredited(eventId, userId, 'maybe');
+  }
   
   const stats = getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.GOD_OF_MISCHIEF.id;
@@ -263,9 +311,19 @@ function trackMaybe(userId) {
 }
 
 // Track fast RSVP (within 30 seconds)
-function trackFastRSVP(userId) {
+function trackFastRSVP(userId, eventId = null) {
+  // If eventId is provided, check if user has already been credited
+  if (eventId && hasBeenCredited(eventId, userId, 'fastRSVP')) {
+    return []; // Already credited for this event
+  }
+  
   ensureUser(userId);
   userStats[userId].fastRSVPs++;
+  
+  // Mark as credited for this event
+  if (eventId) {
+    markAsCredited(eventId, userId, 'fastRSVP');
+  }
   
   const stats = getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.BULLSEYE.id;
@@ -336,6 +394,7 @@ module.exports = {
   trackHostWithTimestamp,
   trackWorthyEvent,
   getLegendaryAchievements,
+  clearEventCredits,
   ACHIEVEMENT_TIERS,
   LEGENDARY_ACHIEVEMENTS
 };
