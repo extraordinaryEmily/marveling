@@ -23,10 +23,10 @@ function parsePST(timeString) {
   console.log('🧩 Input:', timeString);
 
   // Base reference date in PST
-  const now = DateTime.now().setZone('America/Los_Angeles');
-  console.log('📍 Base PST reference:', now.toFormat('fff'));
+  const ourTime = DateTime.now().setZone('America/Los_Angeles');
+  console.log('📍 Base PST reference:', ourTime.toFormat('fff'));
 
-  const baseJs = now.toJSDate();
+  const baseJs = ourTime.toJSDate();
   // console.log('📅 Base JS Date (UTC fields):', baseJs.toISOString());
 
   // Chrono parsing (relative to base date)
@@ -45,7 +45,7 @@ function parsePST(timeString) {
   // 🔧 PATCH: Fix Chrono "day ahead" issue
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
-  if (explicitToday && pstDt.day === now.plus({ days: 1 }).day) {
+  if (explicitToday && pstDt.day === ourTime.plus({ days: 1 }).day) {
     console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
     pstDt = pstDt.minus({ days: 1 });
   }
