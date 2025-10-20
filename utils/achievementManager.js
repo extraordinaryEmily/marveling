@@ -462,7 +462,7 @@ function trackReschedule(userId, oldEventId, newEventId) {
   const stats = getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO.id;
   
-  if (newCount >= 3 && !stats.achievements.includes(achievementId)) {
+  if (newCount >= 5 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
     return [LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO];
   }
