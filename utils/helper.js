@@ -22,32 +22,37 @@ function parsePST(timeString) {
   console.log('\n🧭 [parsePST] -------------------------------');
   console.log('🧩 Input:', timeString);
 
-  // Always use PST as the parsing reference
+  // Base reference date in PST
   const basePst = DateTime.now().setZone('America/Los_Angeles');
   console.log('📍 Base PST reference:', basePst.toFormat('fff'));
+  const baseJs = basePst.toJSDate();
 
-  // Parse with chrono using a **PST base date**, and ensure relative phrases work correctly
-  const results = chrono.parse(timeString, basePst.toJSDate());
+  // Chrono parsing (relative to PST base date)
+  const results = chrono.parse(timeString, baseJs);
   if (!results || results.length === 0) {
     console.log('❌ [parsePST] No parse results');
     return null;
   }
 
-  // Chrono returns a JS Date (in system timezone)
   const parsedJsDate = results[0].start.date();
   console.log('🧮 Chrono returned JS Date (system timezone):', parsedJsDate.toISOString());
 
-  // Instead of "keeping local time", reinterpret parsed date as PST
-  let pstDt = DateTime.fromJSDate(parsedJsDate, { zone: 'utc' })
-    .setZone('America/Los_Angeles');
+  // Reinterpret parsed JS date as wall-clock PST
+  let pstDt = DateTime.fromJSDate(parsedJsDate).setZone('America/Los_Angeles', { keepLocalTime: true });
 
-  // 🧩 FIX: ensure "tomorrow" means *next day in PST*, not local system day
-  if (/tomorrow|tmr|tmrw/i.test(timeString)) {
-    const sameDay = pstDt.hasSame(basePst, 'day');
-    if (sameDay) {
-      pstDt = pstDt.plus({ days: 1 });
-      console.log('🩹 Adjusted "tomorrow" → +1 day in PST');
-    }
+  // Fix for explicit "today" or "tomorrow"
+  const lowerInput = timeString.toLowerCase();
+
+  // If user said "today" but chrono rolled to tomorrow, shift back
+  if (/today|tonight/i.test(lowerInput) && pstDt.hasSame(basePst.plus({ days: 1 }), 'day')) {
+    pstDt = pstDt.minus({ days: 1 });
+    console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
+  }
+
+  // If user said "tomorrow" but chrono kept same day, shift forward
+  if (/tomorrow|tmr|tmrw/i.test(lowerInput) && pstDt.hasSame(basePst, 'day')) {
+    pstDt = pstDt.plus({ days: 1 });
+    console.log('🩹 Adjusted "tomorrow" → +1 day in PST');
   }
 
   console.log('🕐 Reinterpreted as PST:', pstDt.toFormat('fff'));
@@ -110,14 +115,6 @@ function validateAndAdjustEventTime(timeString) {
   const lowerInput = timeString.toLowerCase();
   const explicitToday = lowerInput.includes('today') || lowerInput.includes('tonight');
   debugInfo.explicitToday = explicitToday;
-
-  // 🩹 PATCH: Fix Chrono “day ahead” issue
-  const pstParsed = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
-  const pstNow = now;
-  if (explicitToday && pstParsed.day === pstNow.plus({ days: 1 }).day) {
-    console.log('🔧 [FIX] Chrono advanced a day ahead — subtracting 1 day.');
-    parsedUtcDate = pstParsed.minus({ days: 1 }).toUTC().toJSDate();
-  }
 
   let finalEventTime = DateTime.fromJSDate(parsedUtcDate).setZone('America/Los_Angeles');
 
