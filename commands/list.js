@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { getAllEvents } = require('../utils/eventManager');
 const chrono = require('chrono-node');
+const { DateTime } = require('luxon');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,7 +11,7 @@ module.exports = {
   async execute(interaction) {
     const events = getAllEvents();
     const eventIds = Object.keys(events);
-    const now = new Date();
+    const now = DateTime.now().setZone('America/Los_Angeles');
 
     // Filter out past or expired events
   const activeEventIds = eventIds.filter(id => {
@@ -20,18 +21,29 @@ module.exports = {
       let eventTime;
 
       if (event.type === 'planned') {
-        const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
-        if (parsed && parsed.length > 0) {
-          eventTime = parsed[0].start.date();
+        // ✅ FIX: Use stored ISO timestamps (reliable) instead of re-parsing relative strings
+        if (event.eventTimeIso) {
+          // Primary: Use the stored absolute event time
+          eventTime = DateTime.fromISO(event.eventTimeIso, { zone: 'America/Los_Angeles' });
+        } else if (event.reminderTime) {
+          // Fallback: Calculate from reminderTime (45 mins before event)
+          const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
+          eventTime = reminderTime.plus({ minutes: 45 });
+        } else if (event.time) {
+          // Last resort: parse the string (may be unreliable)
+          const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
+          if (parsed && parsed.length > 0) {
+            eventTime = DateTime.fromJSDate(parsed[0].start.date()).setZone('America/Los_Angeles');
+          }
         }
       } else if (event.type === 'now') {
         // Use creation time or current time for "now" events
-        eventTime = new Date(event.time || event.createdAt);
+        eventTime = DateTime.fromJSDate(new Date(event.time || event.createdAt)).setZone('America/Los_Angeles');
       }
 
       if (eventTime) {
         // Consider event past if it was more than 30 minutes ago (after the event should have started)
-        const eventEndTime = new Date(eventTime.getTime() + 30 * 60 * 1000);
+        const eventEndTime = eventTime.plus({ minutes: 30 });
         return eventEndTime > now;
       }
     }
