@@ -1,5 +1,51 @@
+const fs = require('fs');
+const path = require('path');
+
+// File path for persistence
+const DATA_FILE = path.join(__dirname, '../data/events.json');
+
 let events = {};
 let counter = 1000;
+
+// Load data from file on startup
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      events = data.events || {};
+      counter = data.counter || 1000;
+      console.log(`✅ Loaded ${Object.keys(events).length} events from disk`);
+    }
+  } catch (error) {
+    console.error('❌ Error loading events from disk:', error);
+  }
+}
+
+// Save data to file
+function saveData() {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    const data = {
+      events,
+      counter,
+      lastSaved: new Date().toISOString()
+    };
+    
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('❌ Error saving events to disk:', error);
+  }
+}
+
+// Auto-save every 30 seconds
+setInterval(saveData, 30000);
+
+// Load data on module initialization
+loadData();
 
 function createEvent(creatorId, type, time = null) {
   const id = counter++;
@@ -16,6 +62,7 @@ function createEvent(creatorId, type, time = null) {
     messageId: null,  // original message ID
     createdAt: Date.now()  // timestamp for achievement tracking
   };
+  saveData();
   return id;
 }
 
@@ -29,6 +76,7 @@ function getAllEvents() {
 
 function deleteEvent(id) {
   delete events[id];
+  saveData();
 }
 
 // RSVP ✅
@@ -36,6 +84,7 @@ function addAttendee(id, user) {
   const event = getEvent(id);
   if (!event) return false;
   if (!event.attendees.includes(user)) event.attendees.push(user);
+  saveData();
   return true;
 }
 
@@ -43,6 +92,7 @@ function removeAttendee(id, user) {
   const event = getEvent(id);
   if (!event) return false;
   event.attendees = event.attendees.filter(u => u !== user);
+  saveData();
   return true;
 }
 
@@ -51,6 +101,7 @@ function addInvited(id, user) {
   const event = getEvent(id);
   if (!event) return false;
   if (!event.invited.includes(user)) event.invited.push(user);
+  saveData();
   return true;
 }
 
@@ -58,6 +109,7 @@ function removeInvited(id, user) {
   const event = getEvent(id);
   if (!event) return false;
   event.invited = event.invited.filter(u => u !== user);
+  saveData();
   return true;
 }
 
@@ -66,6 +118,7 @@ function addGuest(id, userId, username, count) {
   const event = getEvent(id);
   if (!event) return false;
   event.guests.push({ userId, username, count });
+  saveData();
   return true;
 }
 
@@ -92,6 +145,7 @@ function setReminder(id, timeoutId, channelId, messageId) {
   event.reminderTimeoutId = timeoutId;
   event.channelId = channelId;
   event.messageId = messageId;
+  saveData();
   return true;
 }
 
@@ -100,6 +154,7 @@ function cancelReminder(id) {
   if (!event || !event.reminderTimeoutId) return false;
   clearTimeout(event.reminderTimeoutId);
   event.reminderTimeoutId = null;
+  saveData();
   return true;
 }
 

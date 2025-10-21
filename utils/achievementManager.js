@@ -1,4 +1,10 @@
 // Achievement tracking system for Marvel Rivals Bot
+const fs = require('fs');
+const path = require('path');
+
+// File path for persistence
+const DATA_FILE = path.join(__dirname, '../data/achievements.json');
+
 let userStats = {};
 
 // Track which users have been credited for which events to prevent farming
@@ -8,6 +14,68 @@ let eventAchievementCredits = {};
 // Track reschedule counts for events
 // Structure: { eventId: rescheduleCount }
 let eventRescheduleCount = {};
+
+// Load data from file on startup
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      userStats = data.userStats || {};
+      eventRescheduleCount = data.eventRescheduleCount || {};
+      
+      // Convert achievement credits arrays back to Sets
+      if (data.eventAchievementCredits) {
+        eventAchievementCredits = {};
+        for (const eventId in data.eventAchievementCredits) {
+          eventAchievementCredits[eventId] = {};
+          for (const userId in data.eventAchievementCredits[eventId]) {
+            eventAchievementCredits[eventId][userId] = new Set(data.eventAchievementCredits[eventId][userId]);
+          }
+        }
+      }
+      
+      console.log(`✅ Loaded ${Object.keys(userStats).length} user stats from disk`);
+    }
+  } catch (error) {
+    console.error('❌ Error loading achievements from disk:', error);
+  }
+}
+
+// Save data to file
+function saveData() {
+  try {
+    const dir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    // Convert Sets to arrays for JSON serialization
+    const creditsForSave = {};
+    for (const eventId in eventAchievementCredits) {
+      creditsForSave[eventId] = {};
+      for (const userId in eventAchievementCredits[eventId]) {
+        creditsForSave[eventId][userId] = Array.from(eventAchievementCredits[eventId][userId]);
+      }
+    }
+    
+    const data = {
+      userStats,
+      eventAchievementCredits: creditsForSave,
+      eventRescheduleCount,
+      lastSaved: new Date().toISOString()
+    };
+    
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('❌ Error saving achievements to disk:', error);
+  }
+}
+
+// Auto-save every 30 seconds
+setInterval(saveData, 30000);
+
+// Load data on module initialization
+loadData();
 
 // Initialize user stats if they don't exist
 function ensureUser(userId) {
@@ -23,6 +91,7 @@ function ensureUser(userId) {
       recentHostTimestamps: [],
       achievements: []
     };
+    saveData();
   }
 }
 
@@ -47,6 +116,7 @@ function markAsCredited(eventId, userId, achievementType) {
 // Clean up event tracking when event is deleted/completed
 function clearEventCredits(eventId) {
   delete eventAchievementCredits[eventId];
+  saveData();
 }
 
 // Get user stats
@@ -59,14 +129,18 @@ function getUserStats(userId) {
 function trackHostCreated(userId) {
   ensureUser(userId);
   userStats[userId].hostsCreated++;
-  return checkHostAchievements(userId);
+  const achievements = checkHostAchievements(userId);
+  saveData();
+  return achievements;
 }
 
 // Track when user invites someone
 function trackInviteSent(userId, count = 1) {
   ensureUser(userId);
   userStats[userId].invitesSent += count;
-  return checkRecruiterAchievements(userId);
+  const achievements = checkRecruiterAchievements(userId);
+  saveData();
+  return achievements;
 }
 
 // Track when user RSVPs to an event
@@ -84,7 +158,9 @@ function trackRSVP(userId, eventId = null) {
     markAsCredited(eventId, userId, 'rsvp');
   }
   
-  return checkResponderAchievements(userId);
+  const achievements = checkResponderAchievements(userId);
+  saveData();
+  return achievements;
 }
 
 // Define ranking achievements
@@ -291,6 +367,7 @@ function checkMoonKnight(userId, hour) {
   
   if ((hour >= 0 && hour < 4) && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.MOON_KNIGHT];
   }
   return [];
@@ -303,6 +380,7 @@ function checkWakandaStrategist(userId, daysInAdvance) {
   
   if (daysInAdvance >= 20 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.WAKANDA_STRATEGIST];
   }
   return [];
@@ -328,8 +406,10 @@ function trackMaybe(userId, eventId = null) {
   
   if (stats.maybeCount >= 20 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.GOD_OF_MISCHIEF];
   }
+  saveData();
   return [];
 }
 
@@ -353,8 +433,10 @@ function trackFastRSVP(userId, eventId = null) {
   
   if (stats.fastRSVPs >= 1 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.BULLSEYE];
   }
+  saveData();
   return [];
 }
 
@@ -375,8 +457,10 @@ function trackHostWithTimestamp(userId) {
   
   if (stats.recentHostTimestamps.length >= 5 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.AGAIN_X5];
   }
+  saveData();
   return [];
 }
 
@@ -390,8 +474,10 @@ function trackWorthyEvent(userId) {
   
   if (stats.worthyEvents >= 3 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.WORTHY];
   }
+  saveData();
   return [];
 }
 
@@ -413,8 +499,10 @@ function trackNoResponse(userId) {
   
   if (stats.noResponseCount >= 50 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.CLOAKS_SHADOW];
   }
+  saveData();
   return [];
 }
 
@@ -470,9 +558,11 @@ function trackReschedule(userId, oldEventId, newEventId) {
   
   if (newCount >= 5 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
+    saveData();
     return [LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO];
   }
   
+  saveData();
   return [];
 }
 
@@ -510,6 +600,10 @@ function checkAvengersAssemble(event) {
       });
     }
   });
+  
+  if (newAchievements.length > 0) {
+    saveData();
+  }
   
   return newAchievements;
 }

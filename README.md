@@ -89,67 +89,67 @@ Squad up with friends, track achievements, and never miss a match!
 
 ---
 
-## ☁️ Deploy to Render (Free Hosting)
+## ☁️ Deploy to Railway (Recommended - Actually Free!)
+
+### Why Railway?
+- ✅ **Actually free:** $5 credit/month
+- ✅ **Smart sleep schedule:** Bot sleeps 2am-10am PST to stay within free tier
+- ✅ **Data persistence:** All events and achievements saved to disk
+- ✅ **Math:** 16hrs/day × 30 days = ~480 hrs = ~$4.80/month ✅
 
 ### Step 1: Prepare Your Repository
 
 1. **Ensure your code is pushed to GitHub**
    ```bash
    git add .
-   git commit -m "Prepare for Render deployment"
+   git commit -m "Add sleep schedule for Railway deployment"
    git push origin main
    ```
 
-### Step 2: Deploy on Render
+### Step 2: Deploy on Railway
 
-1. **Sign up at [render.com](https://render.com)**
+1. **Sign up at [railway.app](https://railway.app)**
 
-2. **Create a New Web Service**
-   - Click "New +" → "Web Service"
-   - Connect your GitHub account
-   - Select your repository
+2. **Create a New Project**
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose your `marveling` repository
 
-3. **Configure the service:**
-   - **Name:** `marveling-bot` (or any name you prefer)
-   - **Environment:** `Node`
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-   - **Instance Type:** `Free`
+3. **Add Environment Variables:**
+   - Click on your deployed service
+   - Go to "Variables" tab
+   - Add: `DISCORD_TOKEN` = `your_bot_token_here`
 
-4. **Add Environment Variables:**
-   Click "Advanced" → "Add Environment Variable" and add:
-   ```
-   DISCORD_TOKEN=your_bot_token_here
-   RENDER_URL=https://your-app-name.onrender.com
-   ```
-   *(Replace `your-app-name` with your actual Render app name)*
-
-5. **Deploy!**
-   - Click "Create Web Service"
-   - Wait for the build to complete
+4. **Deploy!**
+   - Railway automatically builds and deploys
    - Your bot will be live! 🎉
 
 ### Step 3: Deploy Commands to Discord
 
-Once deployed, you need to register your slash commands:
+Once deployed, you need to register your slash commands (one-time setup):
 
-1. **Option A: Run locally once**
-   ```bash
-   npm run deploy
-   ```
+**Run locally:**
+```bash
+npm run deploy
+```
 
-2. **Option B: Use Render Shell**
-   - In Render dashboard → "Shell" tab
-   - Run: `node deploy-commands.js`
+### 😴 Sleep Schedule
 
-### 🔄 Keep-Alive System
+The bot automatically sleeps **2am-10am PST** to save Railway credits:
+- At 2am PST: Bot gracefully shuts down
+- Railway restarts it periodically, but it exits if still in sleep hours
+- At 10am PST: Bot stays running when Railway restarts it
+- **Your data is safe!** Everything is saved to disk before shutdown
 
-The bot includes a built-in keep-alive system that:
-- ✅ Pings itself every 14 minutes to prevent sleep
-- 😴 Automatically sleeps during 4am-8am PST (to save free tier hours)
-- 🌐 Exposes health endpoints at `/` and `/health`
+**Want to change sleep hours?** Edit `index.js` lines 57-62.
 
-**No external services needed!** The bot keeps itself alive automatically.
+### 💾 Data Persistence
+
+The bot automatically saves all data (events, achievements, user stats) to local JSON files:
+- ✅ Data survives restarts
+- 💾 Auto-saves every 30 seconds
+- 📁 Saves immediately on any data change
+- 🔄 Loads data automatically on startup
 
 ---
 
@@ -158,6 +158,7 @@ The bot includes a built-in keep-alive system that:
 - **discord.js** - Discord API wrapper
 - **chrono-node** - Natural language date/time parsing
 - **dotenv** - Environment variable management
+- **luxon** - Advanced date/time handling
 
 ---
 
