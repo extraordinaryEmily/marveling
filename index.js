@@ -75,7 +75,7 @@ client.login(process.env.DISCORD_TOKEN);
 // Auto-Cleanup for Old Events
 // ========================================
 function cleanupOldEvents() {
-  const now = new Date();
+  const now = DateTime.now().setZone('America/Los_Angeles');
   const events = getAllEvents();
   let cleanedCount = 0;
   
@@ -86,19 +86,30 @@ function cleanupOldEvents() {
     if (event.type === 'now' || event.type === 'planned') {
       let eventTime;
       
-      if (event.type === 'planned' && event.time) {
-        const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
-        if (parsed && parsed.length > 0) {
-          eventTime = parsed[0].start.date();
+      if (event.type === 'planned') {
+        // ✅ FIX: Use stored ISO timestamps (reliable) instead of re-parsing relative strings
+        if (event.eventTimeIso) {
+          // Primary: Use the stored absolute event time
+          eventTime = DateTime.fromISO(event.eventTimeIso, { zone: 'America/Los_Angeles' });
+        } else if (event.reminderTime) {
+          // Fallback: Calculate from reminderTime (45 mins before event)
+          const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
+          eventTime = reminderTime.plus({ minutes: 45 });
+        } else if (event.time) {
+          // Last resort: parse the string (may be unreliable on restart)
+          const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
+          if (parsed && parsed.length > 0) {
+            eventTime = DateTime.fromJSDate(parsed[0].start.date()).setZone('America/Los_Angeles');
+          }
         }
       } else if (event.type === 'now') {
         // Use creation time for "now" events
-        eventTime = new Date(event.time || event.createdAt);
+        eventTime = DateTime.fromJSDate(new Date(event.time || event.createdAt)).setZone('America/Los_Angeles');
       }
       
       if (eventTime) {
-        // Check if event is older than 30 minutes
-        const eventEndTime = new Date(eventTime.getTime() + 30 * 60 * 1000);
+        // Check if event ended more than 30 minutes ago
+        const eventEndTime = eventTime.plus({ minutes: 30 });
         
         if (eventEndTime <= now) {
           console.log(`🧹 Auto-cleaning old event #${eventId} (${event.type})`);

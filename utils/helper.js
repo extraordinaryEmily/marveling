@@ -165,10 +165,11 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
   ];
 
-  // Store the reminder date in the event object
+  // Store the reminder date and actual event time in the event object
   const event = getEvent(eventId);
   if (event) {
     event.reminderTime = reminderTime.toISO();
+    event.eventTimeIso = eventTime.toISO(); // Store absolute event time
   }
 
   // Schedule the timeout
