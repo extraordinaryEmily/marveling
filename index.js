@@ -2,9 +2,10 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, Partials, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const { getAllEvents, deleteEvent, cancelReminder } = require('./utils/eventManager');
+const { getAllEvents, deleteEvent, cancelReminder, setReminder } = require('./utils/eventManager');
 const { processEventNonResponders, clearEventCredits } = require('./utils/achievementManager');
 const chrono = require('chrono-node');
+const { DateTime } = require('luxon');
 
 const client = new Client({
   intents: [
@@ -135,10 +136,69 @@ function cleanupOldEvents() {
 // Run cleanup every 5 minutes
 setInterval(cleanupOldEvents, 5 * 60 * 1000);
 
+// ========================================
+// Recreate Reminders on Startup
+// ========================================
+function recreateReminders() {
+  const now = DateTime.now().setZone('America/Los_Angeles');
+  const events = getAllEvents();
+  let recreatedCount = 0;
+  
+  for (const eventId in events) {
+    const event = events[eventId];
+    
+    // If event has a reminderTime but no active timeout, recreate it
+    if (event.reminderTime && !event.reminderTimeoutId && event.channelId) {
+      try {
+        const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
+        const delayMs = reminderTime.diff(now).milliseconds;
+        
+        // Only recreate if reminder is in the future
+        if (delayMs > 0) {
+          const channel = client.channels.cache.get(event.channelId);
+          if (!channel) {
+            console.warn(`⚠️ Channel ${event.channelId} not found for event #${eventId}`);
+            continue;
+          }
+          
+          // Schedule the reminder
+          const timeoutId = setTimeout(async () => {
+            const event = getAllEvents()[eventId];
+            if (!event) return;
+            
+            const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
+            await channel.send({
+              content: `⏰ Time to play! ${attendeeMentions || 'Everyone'}`,
+              allowedMentions: { parse: ['users'] }
+            });
+          }, delayMs);
+          
+          setReminder(eventId, timeoutId, event.channelId, event.messageId);
+          recreatedCount++;
+          
+          const minsUntil = Math.round(delayMs / 60000);
+          console.log(`⏰ Recreated reminder for event #${eventId} (fires in ${minsUntil} minutes)`);
+        } else {
+          console.log(`⏭️  Skipped expired reminder for event #${eventId}`);
+        }
+      } catch (err) {
+        console.error(`❌ Error recreating reminder for event #${eventId}:`, err);
+      }
+    }
+  }
+  
+  if (recreatedCount > 0) {
+    console.log(`✅ Recreated ${recreatedCount} reminder(s) from saved data`);
+  }
+}
+
 // Start services after bot is ready
 client.once('clientReady', () => {
   console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
   
   // Run cleanup immediately on startup
   cleanupOldEvents();
+  
+  // Recreate any reminders from saved events
+  recreateReminders();
 });

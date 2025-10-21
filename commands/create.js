@@ -36,12 +36,13 @@ module.exports = {
       new ButtonBuilder().setCustomId('plan_game_night').setLabel('Plan Game Night').setEmoji('📅').setStyle(ButtonStyle.Secondary)
     );
 
-    const reply = await interaction.reply({ 
+    const response = await interaction.reply({ 
       content: 'Play now or later?', 
       components: [buttons], 
-      flags: MessageFlags.Ephemeral,
-      fetchReply: true 
+      flags: MessageFlags.Ephemeral
     });
+
+    const reply = await response.fetch();
 
     const collector = reply.createMessageComponentCollector({
       filter: i => i.user.id === interaction.user.id && (i.customId === 'play_now' || i.customId === 'plan_game_night'),

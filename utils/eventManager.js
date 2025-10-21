@@ -29,8 +29,18 @@ function saveData() {
       fs.mkdirSync(dir, { recursive: true });
     }
     
+    // Create a copy of events without timeout objects (can't be serialized to JSON)
+    const eventsToSave = {};
+    for (const eventId in events) {
+      const event = events[eventId];
+      eventsToSave[eventId] = {
+        ...event,
+        reminderTimeoutId: null // Don't save timeout object - will recreate on restart
+      };
+    }
+    
     const data = {
-      events,
+      events: eventsToSave,
       counter,
       lastSaved: new Date().toISOString()
     };
