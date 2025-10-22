@@ -55,7 +55,7 @@ function checkSleepSchedule() {
   const hour = pstTime.getHours();
   
   // Sleep between 2am and 10am PST
-  if (hour >= 17 && hour < 19) {
+  if (hour >= 17 && hour < 19) { // TEST: 5pm-7pm PST
     console.log(`😴 Sleep time (${hour}:00 PST). Shutting down to save credits...`);
     console.log('💾 All data has been saved to disk and will persist on restart.');
     console.log('⏰ Bot will wake up at 10am PST when Railway restarts it.');
@@ -66,8 +66,8 @@ function checkSleepSchedule() {
 // Check sleep schedule on startup
 checkSleepSchedule();
 
-// Check every hour if it's time to sleep
-setInterval(checkSleepSchedule, 60 * 60 * 1000);
+// Check every 5 minutes if it's time to sleep
+setInterval(checkSleepSchedule, 5 * 60 * 1000);
 
 client.login(process.env.DISCORD_TOKEN);
 
