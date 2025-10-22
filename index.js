@@ -52,14 +52,14 @@ client.on('interactionCreate', async interaction => {
 function checkSleepSchedule() {
   const now = new Date();
   const pstTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-  const hour = pstTime.getHours();
-  
-  // Sleep between 2am and 10am PST
-  if (hour >= 20 && hour < 21) { // TEST: 5pm-7pm PST
-    console.log(`😴 Sleep time (${hour}:00 PST). Shutting down to save credits...`);
+  const hour = now.getHours();   // 0-23 in local server time
+  const minute = now.getMinutes();
+
+  if ((hour === 21 && minute >= 7) || (hour === 21 && minute < 20)) {
+    console.log(`😴 Sleep time (${hour}:${minute} PST). Shutting down to save credits...`);
     console.log('💾 All data has been saved to disk and will persist on restart.');
-    console.log('⏰ Bot will wake up at 10am PST when Railway restarts it.');
-    process.exit(0); // Graceful shutdown - Railway will restart later
+    console.log('⏰ Bot will wake up at 9:20 PM PST.');
+    process.exit(0); // Graceful shutdown
   }
 }
 
