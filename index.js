@@ -55,12 +55,12 @@ function checkSleepSchedule() {
   const hour = now.getHours();   // 0-23 in local server time
   const minute = now.getMinutes();
 
-  if ((hour === 21 && minute >= 7) || (hour === 21 && minute < 20)) {
-    console.log(`😴 Sleep time (${hour}:${minute} PST). Shutting down to save credits...`);
-    console.log('💾 All data has been saved to disk and will persist on restart.');
-    console.log('⏰ Bot will wake up at 9:20 PM PST.');
-    process.exit(0); // Graceful shutdown
-  }
+  // if ((hour === 3 && minute >= 30) || (hour === 9 && minute < 30)) {
+  //   console.log(`😴 Sleep time (${hour}:${minute} PST). Shutting down to save credits...`);
+  //   console.log('💾 All data has been saved to disk and will persist on restart.');
+  //   console.log('⏰ Bot will wake up at 9:20 PM PST.');
+  //   process.exit(0); // Graceful shutdown
+  // }
 }
 
 // Check sleep schedule on startup
