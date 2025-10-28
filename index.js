@@ -247,6 +247,24 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
               components: replyData.components
             }
           });
+          
+          // Return an object with fetch() method to retrieve the message
+          return {
+            fetch: async () => {
+              // Fetch the original interaction response message
+              const response = await fetch(`https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`, {
+                method: 'GET',
+                headers: { 
+                  'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+                }
+              });
+              const messageData = await response.json();
+              
+              // Return a message-like object that can be used with collectors
+              // Since the message is ephemeral, we need to use the channel to create collectors
+              return channel;
+            }
+          };
         },
         editReply: async (replyData) => {
           const response = await fetch(`https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`, {
@@ -312,6 +330,112 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
           type: InteractionResponseType.ChannelMessageWithSource,
           data: {
             content: '❌ Error running command: ' + error.message,
+            flags: MessageFlags.Ephemeral
+          }
+        });
+      }
+    }
+  }
+  
+  // Handle Message Component interactions (buttons, select menus, etc.)
+  if (interaction.type === InteractionType.MessageComponent) {
+    const buttonId = interaction.data.custom_id;
+    console.log(`🔘 Received button: ${buttonId}`);
+    
+    try {
+      // Wait for client to be ready
+      if (!client.isReady()) {
+        console.log('⏳ Waiting for Discord client to be ready...');
+        await new Promise((resolve) => {
+          if (client.isReady()) return resolve();
+          client.once('ready', resolve);
+        });
+      }
+
+      // Create a mock interaction for button handling
+      const mockInteraction = {
+        ...interaction,
+        user: interaction.member?.user || interaction.user,
+        member: interaction.member,
+        guild_id: interaction.guild_id,
+        channel_id: interaction.channel_id,
+        replied: false,
+        deferred: false,
+        deferUpdate: async () => {
+          mockInteraction.deferred = true;
+          res.json({
+            type: InteractionResponseType.DeferredMessageUpdate
+          });
+        },
+        update: async (replyData) => {
+          mockInteraction.replied = true;
+          res.json({
+            type: InteractionResponseType.UpdateMessage,
+            data: {
+              content: replyData.content,
+              embeds: replyData.embeds,
+              components: replyData.components,
+              flags: replyData.flags
+            }
+          });
+        },
+        reply: async (replyData) => {
+          mockInteraction.replied = true;
+          res.json({
+            type: InteractionResponseType.ChannelMessageWithSource,
+            data: {
+              content: replyData.content,
+              embeds: replyData.embeds,
+              components: replyData.components,
+              flags: replyData.flags
+            }
+          });
+        },
+        editReply: async (replyData) => {
+          const response = await fetch(`https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`, {
+            method: 'PATCH',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+            },
+            body: JSON.stringify({
+              content: replyData.content,
+              embeds: replyData.embeds,
+              components: replyData.components
+            })
+          });
+          return response.json();
+        }
+      };
+
+      // Route to appropriate command handler
+      if (buttonId.startsWith('create_')) {
+        const createCommand = commands.get('create');
+        if (createCommand && createCommand.handleButton) {
+          await createCommand.handleButton(mockInteraction, client, buttonId);
+        }
+      }
+      // Add more button handlers here for other commands
+      
+      // If no handler replied, send a default response
+      if (!mockInteraction.replied && !mockInteraction.deferred) {
+        res.json({
+          type: InteractionResponseType.UpdateMessage,
+          data: {
+            content: '✅ Button pressed',
+            components: []
+          }
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Error handling button:', error);
+      
+      if (!res.headersSent) {
+        return res.json({
+          type: InteractionResponseType.ChannelMessageWithSource,
+          data: {
+            content: '❌ Error handling button: ' + error.message,
             flags: MessageFlags.Ephemeral
           }
         });
@@ -480,9 +604,29 @@ function recreateReminders() {
   }
 }
 
+// Handle messages for multi-step commands (like /create time input)
+client.on('messageCreate', async (message) => {
+  // Ignore bot messages
+  if (message.author.bot) return;
+
+  try {
+    // Check if /create command is waiting for time input
+    const createCommand = commands.get('create');
+    if (createCommand && createCommand.handleTimeMessage) {
+      const handled = await createCommand.handleTimeMessage(message, client);
+      if (handled) return;
+    }
+
+    // Add more command message handlers here as needed
+  } catch (error) {
+    console.error('❌ Error handling message for command:', error);
+  }
+});
+
 // Start services after bot is ready
 client.once('clientReady', () => {
   console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
+  console.log('📨 Message listener active for multi-step commands');
   
   // Run cleanup immediately on startup
   cleanupOldEvents();
