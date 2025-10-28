@@ -185,6 +185,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
         });
       }
       
+      // Fetch guild and channel objects from cache
+      const guild = await client.guilds.fetch(interaction.guild_id);
+      const channel = await client.channels.fetch(interaction.channel_id);
+      
       // Create a mock interaction object that works with existing command handlers
       const mockInteraction = {
         ...interaction,
@@ -208,8 +212,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             return option?.value || null;
           }
         },
-        guild: { id: interaction.guild_id },
-        channel: { id: interaction.channel_id },
+        guild: guild,
+        channel: channel,
         user: interaction.member?.user || interaction.user,
         member: interaction.member,
         replied: false,
