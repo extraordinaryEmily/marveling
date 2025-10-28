@@ -1,12 +1,130 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Partials, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Partials, MessageFlags, InteractionType, InteractionResponseType } = require('discord.js');
+const express = require('express');
+const { verifyKeyMiddleware } = require('discord-interactions');
 const fs = require('fs');
 const path = require('path');
 const { getAllEvents, deleteEvent, cancelReminder, setReminder } = require('./utils/eventManager');
 const { processEventNonResponders, clearEventCredits } = require('./utils/achievementManager');
+const { getPendingReminders, markReminderSent } = require('./utils/supabaseClient');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 
+// ========================================
+// Express Server (HTTP Interactions Endpoint)
+// ========================================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.send('🤖 Marveling Bot is awake and running!');
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ========================================
+// Reminder Checking Endpoint (Called by Cron)
+// ========================================
+app.get('/check-reminders', async (req, res) => {
+  console.log('⏰ Checking for pending reminders in Supabase...');
+  
+  try {
+    // Wait for client to be ready
+    if (!client.isReady()) {
+      console.log('⏳ Waiting for Discord client to be ready...');
+      await new Promise((resolve) => {
+        if (client.isReady()) return resolve();
+        const timeout = setTimeout(() => resolve(), 10000); // 10 sec timeout
+        client.once('ready', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+    }
+
+    // Get pending reminders from Supabase
+    const pendingReminders = await getPendingReminders();
+    
+    if (pendingReminders.length === 0) {
+      console.log('✅ No pending reminders');
+      return res.json({ 
+        status: 'ok', 
+        message: 'No pending reminders',
+        checked: 0,
+        sent: 0
+      });
+    }
+
+    console.log(`📬 Found ${pendingReminders.length} pending reminder(s)`);
+    let sentCount = 0;
+
+    // Process each reminder
+    for (const reminder of pendingReminders) {
+      try {
+        const channel = await client.channels.fetch(reminder.channel_id);
+        
+        if (!channel) {
+          console.warn(`⚠️ Channel ${reminder.channel_id} not found for reminder ${reminder.id}`);
+          await markReminderSent(reminder.id); // Mark as sent to avoid retry
+          continue;
+        }
+
+        // Format attendee mentions
+        const attendeeMentions = reminder.attendees && reminder.attendees.length > 0
+          ? reminder.attendees.map(id => `<@${id}>`).join(' ')
+          : 'Everyone';
+
+        // Send the reminder
+        await channel.send({
+          content: `⏰ Time to play! ${attendeeMentions}`,
+          allowedMentions: { parse: ['users'] }
+        });
+
+        // Mark as sent in Supabase
+        await markReminderSent(reminder.id);
+        
+        console.log(`✅ Sent reminder for event #${reminder.event_id}`);
+        sentCount++;
+      } catch (error) {
+        console.error(`❌ Failed to send reminder ${reminder.id}:`, error.message);
+        // Don't mark as sent so it can retry
+      }
+    }
+
+    res.json({ 
+      status: 'ok', 
+      checked: pendingReminders.length,
+      sent: sentCount,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error checking reminders:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: error.message 
+    });
+  }
+});
+
+// Load commands
+const commands = new Collection();
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  commands.set(command.data.name, command);
+}
+
+// Initialize Discord client (for API calls, not Gateway)
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -14,36 +132,193 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildMembers, // ✅ Needed for fetching role.members and reactions
+    GatewayIntentBits.GuildMembers,
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-client.commands = new Collection();
+client.commands = commands;
 
-// Load commands dynamically
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  client.commands.set(command.data.name, command);
-}
-
-client.once('clientReady', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+// Login to Discord (for API access)
+client.login(process.env.DISCORD_TOKEN).then(() => {
+  console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
+}).catch(err => {
+  console.error('❌ Failed to login to Discord:', err);
 });
 
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-  try {
-    await command.execute(interaction, client);
-  } catch (error) {
-    console.error(error);
-    await interaction.reply({ content: '❌ Error running command', flags: MessageFlags.Ephemeral });
+// ========================================
+// Discord Interactions Endpoint (HTTP)
+// ========================================
+app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), async (req, res) => {
+  const interaction = req.body;
+  
+  // Handle PING from Discord
+  if (interaction.type === InteractionType.Ping) {
+    console.log('✅ Received PING from Discord');
+    return res.json({ type: InteractionResponseType.Pong });
   }
+  
+  // Handle Application Commands
+  if (interaction.type === InteractionType.ApplicationCommand) {
+    const commandName = interaction.data.name;
+    const command = commands.get(commandName);
+    
+    console.log(`📥 Received command: /${commandName}`);
+    
+    if (!command) {
+      return res.json({
+        type: InteractionResponseType.ChannelMessageWithSource,
+        data: {
+          content: '❌ Unknown command',
+          flags: MessageFlags.Ephemeral
+        }
+      });
+    }
+    
+    try {
+      // Wait for client to be ready
+      if (!client.isReady()) {
+        console.log('⏳ Waiting for Discord client to be ready...');
+        await new Promise((resolve) => {
+          if (client.isReady()) return resolve();
+          client.once('ready', resolve);
+        });
+      }
+      
+      // Create a mock interaction object that works with existing command handlers
+      const mockInteraction = {
+        ...interaction,
+        isChatInputCommand: () => true,
+        commandName: commandName,
+        options: {
+          getString: (name) => {
+            const option = interaction.data.options?.find(opt => opt.name === name);
+            return option?.value || null;
+          },
+          getUser: (name) => {
+            const option = interaction.data.options?.find(opt => opt.name === name);
+            return option?.value ? { id: option.value } : null;
+          },
+          getInteger: (name) => {
+            const option = interaction.data.options?.find(opt => opt.name === name);
+            return option?.value || null;
+          },
+          getBoolean: (name) => {
+            const option = interaction.data.options?.find(opt => opt.name === name);
+            return option?.value || null;
+          }
+        },
+        guild: { id: interaction.guild_id },
+        channel: { id: interaction.channel_id },
+        user: interaction.member?.user || interaction.user,
+        member: interaction.member,
+        replied: false,
+        deferred: false,
+        reply: async (replyData) => {
+          if (mockInteraction.replied || mockInteraction.deferred) {
+            // Use followUp for already replied interactions
+            const response = await fetch(`https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+              },
+              body: JSON.stringify({
+                content: replyData.content,
+                embeds: replyData.embeds,
+                flags: replyData.flags,
+                components: replyData.components
+              })
+            });
+            return response.json();
+          }
+          
+          mockInteraction.replied = true;
+          res.json({
+            type: InteractionResponseType.ChannelMessageWithSource,
+            data: {
+              content: replyData.content,
+              embeds: replyData.embeds,
+              flags: replyData.flags,
+              components: replyData.components
+            }
+          });
+        },
+        editReply: async (replyData) => {
+          const response = await fetch(`https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`, {
+            method: 'PATCH',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+            },
+            body: JSON.stringify({
+              content: replyData.content,
+              embeds: replyData.embeds,
+              components: replyData.components
+            })
+          });
+          return response.json();
+        },
+        deferReply: async (options = {}) => {
+          mockInteraction.deferred = true;
+          res.json({
+            type: InteractionResponseType.DeferredChannelMessageWithSource,
+            data: {
+              flags: options.flags
+            }
+          });
+        },
+        followUp: async (replyData) => {
+          const response = await fetch(`https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+            },
+            body: JSON.stringify({
+              content: replyData.content,
+              embeds: replyData.embeds,
+              flags: replyData.flags,
+              components: replyData.components
+            })
+          });
+          return response.json();
+        }
+      };
+      
+      // Execute the command
+      await command.execute(mockInteraction, client);
+      
+      // If no reply was sent yet, send a default acknowledgment
+      if (!mockInteraction.replied && !mockInteraction.deferred) {
+        res.json({
+          type: InteractionResponseType.ChannelMessageWithSource,
+          data: {
+            content: '✅ Command executed',
+            flags: MessageFlags.Ephemeral
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Error executing command:', error);
+      
+      if (!res.headersSent) {
+        return res.json({
+          type: InteractionResponseType.ChannelMessageWithSource,
+          data: {
+            content: '❌ Error running command: ' + error.message,
+            flags: MessageFlags.Ephemeral
+          }
+        });
+      }
+    }
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 HTTP server running on port ${PORT}`);
+  console.log(`📡 Interactions endpoint: /interactions`);
 });
 
 // ========================================
@@ -68,8 +343,6 @@ checkSleepSchedule();
 
 // Check every 5 minutes if it's time to sleep
 setInterval(checkSleepSchedule, 5 * 60 * 1000);
-
-client.login(process.env.DISCORD_TOKEN);
 
 // ========================================
 // Auto-Cleanup for Old Events

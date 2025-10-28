@@ -9,6 +9,7 @@ const {
 const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
 const { clearEventCredits, processEventNonResponders, trackReschedule } = require('../utils/achievementManager');
 const { registerCommandState, completeUserCommand } = require('../utils/commandStateManager');
+const { cancelReminder: cancelSupabaseReminder } = require('../utils/supabaseClient');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -112,6 +113,7 @@ module.exports = {
 
       // Cancel old reminder and delete old event
       cancelReminder(eventId);
+      cancelSupabaseReminder(eventId).catch(err => console.error('Failed to cancel Supabase reminder:', err));
       clearEventCredits(eventId);
       const oldInvited = [...event.invited];
       deleteEvent(eventId);

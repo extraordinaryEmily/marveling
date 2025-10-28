@@ -16,7 +16,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.76.1",
     "chrono-node": "^2.9.0",
+    "discord-interactions": "^4.4.0",
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.3",
     "express": "^4.18.2",

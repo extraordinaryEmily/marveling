@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { deleteEvent, getEvent, cancelReminder } = require('../utils/eventManager');
 const { clearEventCredits, processEventNonResponders } = require('../utils/achievementManager');
+const { cancelReminder: cancelSupabaseReminder } = require('../utils/supabaseClient');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -30,6 +31,7 @@ module.exports = {
     
     // Cancel any scheduled reminders
     cancelReminder(id);
+    cancelSupabaseReminder(id).catch(err => console.error('Failed to cancel Supabase reminder:', err));
     // Clear achievement tracking for this event
     clearEventCredits(id);
     deleteEvent(id);

@@ -10,6 +10,7 @@ const {
   addInvited
 } = require('./eventManager');
 const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, clearEventCredits, processEventNonResponders, trackReschedule, checkAvengersAssemble } = require('./achievementManager');
+const { scheduleReminder: scheduleSupabaseReminder, cancelReminder: cancelSupabaseReminder } = require('./supabaseClient');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 /**
@@ -127,6 +128,7 @@ function validateAndAdjustEventTime(timeString) {
 
 /**
  * Schedules a reminder 45 minutes before event time, timezone-safe.
+ * Stores in Supabase for persistence across bot restarts.
  */
 function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(timeString);
@@ -147,54 +149,62 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
     return false;
   }
 
-  const MAX_TIMEOUT_MS = 2147483647;
-  if (delayMs > MAX_TIMEOUT_MS) {
-    console.log(`⚠️ Event ${eventId}: reminder too far in the future, cannot schedule`);
-    return false;
-  }
-
   console.log('⏰ Reminder set for: ' + reminderTime.toFormat('EEE MMM dd h:mm a') + ' PST\n');
-
-  const reminderMessages = [
-    { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
-    { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
-    { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **45 minutes!**' },
-    { title: '🔥 Almost time!', desc: 'Game night kicks off in **45 minutes!**' },
-    { title: '💥 Heads up!', desc: "We're playing in **45 minutes!**" },
-    { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
-    { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
-  ];
 
   // Store the reminder date and actual event time in the event object
   const event = getEvent(eventId);
   if (event) {
     event.reminderTime = reminderTime.toISO();
     event.eventTimeIso = eventTime.toISO(); // Store absolute event time
+    
+    // Store reminder in Supabase for persistence
+    scheduleSupabaseReminder(
+      eventId,
+      reminderTime.toISO(),
+      channel.id,
+      event.attendees || []
+    ).catch(err => {
+      console.error('Failed to store reminder in Supabase:', err);
+    });
   }
 
-  // Schedule the timeout
-  const timeoutId = setTimeout(async () => {
-    const event = getEvent(eventId);
-    if (!event) return;
+  // Also set local timeout if bot is awake (for immediate sending)
+  const MAX_TIMEOUT_MS = 2147483647;
+  if (delayMs <= MAX_TIMEOUT_MS) {
+    const reminderMessages = [
+      { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
+      { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
+      { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **45 minutes!**' },
+      { title: '🔥 Almost time!', desc: 'Game night kicks off in **45 minutes!**' },
+      { title: '💥 Heads up!', desc: "We're playing in **45 minutes!**" },
+      { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
+      { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
+    ];
+    
+    const timeoutId = setTimeout(async () => {
+      const event = getEvent(eventId);
+      if (!event) return;
 
-    const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
-    const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
+      const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
+      const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
 
-    const embed = new EmbedBuilder()
-      .setColor(0xffa500)
-      .setTitle(randomMsg.title)
-      .setDescription(randomMsg.desc)
-      .setImage('https://giffiles.alphacoders.com/223/223284.gif')
-      .addFields({ name: 'Event ID', value: `#${eventId}` });
+      const embed = new EmbedBuilder()
+        .setColor(0xffa500)
+        .setTitle(randomMsg.title)
+        .setDescription(randomMsg.desc)
+        .setImage('https://giffiles.alphacoders.com/223/223284.gif')
+        .addFields({ name: 'Event ID', value: `#${eventId}` });
 
-    await channel.send({
-      content: attendeeMentions ? `⏰ ${attendeeMentions}` : `⏰ ${rolePing}`,
-      embeds: [embed],
-      allowedMentions: { parse: ['users', 'roles'] }
-    });
-  }, delayMs);
+      await channel.send({
+        content: attendeeMentions ? `⏰ ${attendeeMentions}` : `⏰ ${rolePing}`,
+        embeds: [embed],
+        allowedMentions: { parse: ['users', 'roles'] }
+      });
+    }, delayMs);
 
-  setReminder(eventId, timeoutId, channel.id, null);
+    setReminder(eventId, timeoutId, channel.id, null);
+  }
+  
   return true;
 }
 
@@ -352,6 +362,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
 
         // Cancel old reminder and delete old event and message
         cancelReminder(id);
+        cancelSupabaseReminder(id).catch(err => console.error('Failed to cancel Supabase reminder:', err));
         clearEventCredits(id);
         deleteEvent(id);
         await msg.delete().catch(() => {});
