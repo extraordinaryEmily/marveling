@@ -203,6 +203,33 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             const option = interaction.data.options?.find(opt => opt.name === name);
             return option?.value ? { id: option.value } : null;
           },
+          getMentionable: (name) => {
+            const option = interaction.data.options?.find(opt => opt.name === name);
+            if (!option?.value) return null;
+            
+            // Mentionable can be a user or role
+            // Discord sends the ID in the value, and the resolved data in interaction.data.resolved
+            const resolved = interaction.data.resolved;
+            
+            // Check if it's a user
+            if (resolved?.users?.[option.value]) {
+              const userData = resolved.users[option.value];
+              const memberData = resolved.members?.[option.value];
+              return {
+                id: option.value,
+                user: userData,
+                member: memberData
+              };
+            }
+            
+            // Check if it's a role
+            if (resolved?.roles?.[option.value]) {
+              return guild.roles.cache.get(option.value);
+            }
+            
+            // Fallback - just return an object with the ID
+            return { id: option.value, user: { id: option.value } };
+          },
           getInteger: (name) => {
             const option = interaction.data.options?.find(opt => opt.name === name);
             return option?.value || null;
@@ -614,6 +641,13 @@ client.on('messageCreate', async (message) => {
     const createCommand = commands.get('create');
     if (createCommand && createCommand.handleTimeMessage) {
       const handled = await createCommand.handleTimeMessage(message, client);
+      if (handled) return;
+    }
+
+    // Check if /reschedule command is waiting for time input
+    const rescheduleCommand = commands.get('reschedule');
+    if (rescheduleCommand && rescheduleCommand.handleTimeMessage) {
+      const handled = await rescheduleCommand.handleTimeMessage(message, client);
       if (handled) return;
     }
 
