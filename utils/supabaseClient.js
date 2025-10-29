@@ -87,9 +87,10 @@ async function getPendingReminders() {
       .order('reminder_time', { ascending: true });
 
     if (error) throw error;
+
     return data || [];
   } catch (error) {
-    console.error('❌ Error fetching pending reminders:', error);
+    // Silent fail for cron endpoint
     return [];
   }
 }
@@ -109,7 +110,7 @@ async function markReminderSent(reminderId) {
 
     return true;
   } catch (error) {
-    console.error('❌ Error marking reminder as sent:', error);
+    // Silent fail for cron endpoint
     return false;
   }
 }

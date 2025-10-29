@@ -92,7 +92,7 @@ app.get('/check-reminders', async (req, res) => {
     const pendingReminders = await getPendingReminders();
     
     if (pendingReminders.length === 0) {
-      return res.json({ status: 'ok', sent: 0 });
+      return res.status(204).send();
     }
 
     let sentCount = 0;
@@ -153,10 +153,10 @@ app.get('/check-reminders', async (req, res) => {
       }
     }
 
-    res.json({ status: 'ok', sent: sentCount });
+    res.status(204).send();
 
   } catch (error) {
-    res.status(500).json({ status: 'error' });
+    res.status(500).send();
   }
 });
 
