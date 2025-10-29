@@ -22,8 +22,11 @@ let lastRequestTime = Date.now();
 // Middleware to log all requests and update last request time
 app.use((req, res, next) => {
   lastRequestTime = Date.now();
-  const timestamp = new Date().toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' });
-  console.log(`📨 [${timestamp} PST] ${req.method} ${req.path}`);
+  // Don't log /check-reminders to prevent cron "output too large" error
+  if (req.path !== '/check-reminders') {
+    const timestamp = new Date().toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' });
+    console.log(`📨 [${timestamp} PST] ${req.method} ${req.path}`);
+  }
   next();
 });
 
