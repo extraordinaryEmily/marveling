@@ -73,13 +73,7 @@ app.get('/debug-reminders', async (req, res) => {
 // Reminder Checking Endpoint (Called by Cron)
 // ========================================
 app.get('/check-reminders', async (req, res) => {
-  const now = new Date();
-  const nowUTC = now.toISOString();
-  const lookAhead = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
-  
-  console.log(`⏰ Checking for pending reminders in Supabase...`);
-  console.log(`   Current time (UTC): ${nowUTC}`);
-  console.log(`   Looking ahead 20 minutes to: ${lookAhead}`);
+  console.log(`⏰ Checking reminders...`);
   
   try {
     // Wait for client to be ready
@@ -99,15 +93,8 @@ app.get('/check-reminders', async (req, res) => {
     const pendingReminders = await getPendingReminders();
     
     if (pendingReminders.length === 0) {
-      console.log('✅ No pending reminders found');
-      return res.json({ 
-        status: 'ok', 
-        message: 'No pending reminders',
-        checked: 0,
-        sent: 0,
-        currentTime: nowUTC,
-        lookingAheadTo: lookAhead
-      });
+      console.log('✅ No reminders');
+      return res.json({ status: 'ok', checked: 0, sent: 0 });
     }
 
     console.log(`📬 Found ${pendingReminders.length} pending reminder(s)`);
@@ -177,22 +164,12 @@ app.get('/check-reminders', async (req, res) => {
       }
     }
 
-    res.json({ 
-      status: 'ok', 
-      checked: pendingReminders.length,
-      sent: sentCount,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Don't force sleep - reminders were sent, bot should stay awake for events
-    console.log(`✅ Sent ${sentCount} reminder(s), staying awake for events`);
+    console.log(`✅ Sent ${sentCount} reminder(s)`);
+    res.json({ status: 'ok', sent: sentCount });
 
   } catch (error) {
-    console.error('❌ Error checking reminders:', error);
-    res.status(500).json({ 
-      status: 'error', 
-      message: error.message 
-    });
+    console.error('❌ Error:', error.message);
+    res.status(500).json({ status: 'error' });
   }
 });
 

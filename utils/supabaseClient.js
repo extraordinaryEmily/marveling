@@ -87,8 +87,6 @@ async function getPendingReminders() {
       .order('reminder_time', { ascending: true });
 
     if (error) throw error;
-
-    console.log(`📋 Found ${data?.length || 0} reminder(s) due by ${lookAhead.toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' })} PST`);
     return data || [];
   } catch (error) {
     console.error('❌ Error fetching pending reminders:', error);
