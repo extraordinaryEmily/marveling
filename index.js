@@ -73,12 +73,9 @@ app.get('/debug-reminders', async (req, res) => {
 // Reminder Checking Endpoint (Called by Cron)
 // ========================================
 app.get('/check-reminders', async (req, res) => {
-  console.log(`⏰ Checking reminders...`);
-  
   try {
     // Wait for client to be ready
     if (!client.isReady()) {
-      console.log('⏳ Waiting for Discord client to be ready...');
       await new Promise((resolve) => {
         if (client.isReady()) return resolve();
         const timeout = setTimeout(() => resolve(), 10000); // 10 sec timeout
@@ -89,35 +86,28 @@ app.get('/check-reminders', async (req, res) => {
       });
     }
 
-    // Get pending reminders from Supabase
     const pendingReminders = await getPendingReminders();
     
     if (pendingReminders.length === 0) {
-      console.log('✅ No reminders');
-      return res.json({ status: 'ok', checked: 0, sent: 0 });
+      return res.json({ status: 'ok', sent: 0 });
     }
 
-    console.log(`📬 Found ${pendingReminders.length} pending reminder(s)`);
     let sentCount = 0;
 
     // Process each reminder
     for (const reminder of pendingReminders) {
       try {
-        // Only send reminders that are actually due NOW or overdue
-        // Don't send ones that are still in the future (prevents duplicates with local setTimeout)
         const reminderTime = new Date(reminder.reminder_time);
         const currentTime = new Date();
         
         if (reminderTime > currentTime) {
-          console.log(`⏳ Reminder ${reminder.id} not due yet (due at ${reminder.reminder_time}), skipping for now`);
-          continue; // Skip this one for now, will check again next time
+          continue; // Not due yet, skip
         }
         
         const channel = await client.channels.fetch(reminder.channel_id);
         
         if (!channel) {
-          console.warn(`⚠️ Channel ${reminder.channel_id} not found for reminder ${reminder.id}`);
-          await markReminderSent(reminder.id); // Mark as sent to avoid retry
+          await markReminderSent(reminder.id);
           continue;
         }
 
@@ -153,22 +143,16 @@ app.get('/check-reminders', async (req, res) => {
           allowedMentions: { parse: ['users'] }
         });
 
-        // Mark as sent in Supabase
         await markReminderSent(reminder.id);
-        
-        console.log(`✅ Sent reminder for event #${reminder.event_id}`);
         sentCount++;
       } catch (error) {
-        console.error(`❌ Failed to send reminder ${reminder.id}:`, error.message);
-        // Don't mark as sent so it can retry
+        // Silently skip failed reminders
       }
     }
 
-    console.log(`✅ Sent ${sentCount} reminder(s)`);
     res.json({ status: 'ok', sent: sentCount });
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
     res.status(500).json({ status: 'error' });
   }
 });
