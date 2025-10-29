@@ -60,7 +60,7 @@ app.get('/debug-reminders', async (req, res) => {
     const now = new Date();
     res.json({
       currentTime: now.toISOString(),
-      lookAheadTo: new Date(now.getTime() + 6 * 60 * 1000).toISOString(),
+      lookAheadTo: new Date(now.getTime() + 20 * 60 * 1000).toISOString(),
       remindersInDatabase: data || [],
       count: data?.length || 0
     });
@@ -75,11 +75,11 @@ app.get('/debug-reminders', async (req, res) => {
 app.get('/check-reminders', async (req, res) => {
   const now = new Date();
   const nowUTC = now.toISOString();
-  const lookAhead = new Date(now.getTime() + 6 * 60 * 1000).toISOString();
+  const lookAhead = new Date(now.getTime() + 20 * 60 * 1000).toISOString();
   
   console.log(`⏰ Checking for pending reminders in Supabase...`);
   console.log(`   Current time (UTC): ${nowUTC}`);
-  console.log(`   Looking ahead to: ${lookAhead}`);
+  console.log(`   Looking ahead 20 minutes to: ${lookAhead}`);
   
   try {
     // Wait for client to be ready
@@ -100,25 +100,14 @@ app.get('/check-reminders', async (req, res) => {
     
     if (pendingReminders.length === 0) {
       console.log('✅ No pending reminders found');
-      const response = { 
+      return res.json({ 
         status: 'ok', 
         message: 'No pending reminders',
         checked: 0,
         sent: 0,
         currentTime: nowUTC,
         lookingAheadTo: lookAhead
-      };
-      
-      res.json(response);
-      
-      // Force sleep since nothing to do
-      console.log('💤 No reminders due, going to sleep in 2 seconds...');
-      setTimeout(() => {
-        console.log('😴 Forcing shutdown to save resources...');
-        process.exit(0);
-      }, 2000); // Wait 2 seconds to ensure response is sent
-      
-      return;
+      });
     }
 
     console.log(`📬 Found ${pendingReminders.length} pending reminder(s)`);
@@ -152,13 +141,13 @@ app.get('/check-reminders', async (req, res) => {
 
         // Random reminder messages (same as helper.js)
         const reminderMessages = [
-          { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
+          { title: '⚡ Get on soon!', desc: 'Game night starts in **~25 minutes!**' },
           { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
-          { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **45 minutes!**' },
-          { title: '🔥 Almost time!', desc: 'Game night kicks off in **45 minutes!**' },
-          { title: '💥 Heads up!', desc: "We're playing in **45 minutes!**" },
+          { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **~25 minutes!**' },
+          { title: '🔥 Almost time!', desc: 'Game night kicks off in **~25 minutes!**' },
+          { title: '💥 Heads up!', desc: "We're playing in **~25 minutes!**" },
           { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
-          { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
+          { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **~25 minutes!**' }
         ];
         const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
 

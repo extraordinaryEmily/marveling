@@ -139,7 +139,7 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   }
 
   const eventTime = DateTime.fromJSDate(utcDate).setZone('America/Los_Angeles');
-  const reminderTime = eventTime.minus({ minutes: 45 });
+  const reminderTime = eventTime.minus({ minutes: 25 }); // 25 min advance (reduced from 45)
   const now = DateTime.now().setZone('America/Los_Angeles');
 
   const delayMs = reminderTime.diff(now).as('milliseconds');
@@ -172,13 +172,13 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   const MAX_TIMEOUT_MS = 2147483647;
   if (delayMs <= MAX_TIMEOUT_MS) {
     const reminderMessages = [
-      { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
+      { title: '⚡ Get on soon!', desc: 'Game night starts in **~25 minutes!**' },
       { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
-      { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **45 minutes!**' },
-      { title: '🔥 Almost time!', desc: 'Game night kicks off in **45 minutes!**' },
-      { title: '💥 Heads up!', desc: "We're playing in **45 minutes!**" },
+      { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **~25 minutes!**' },
+      { title: '🔥 Almost time!', desc: 'Game night kicks off in **~25 minutes!**' },
+      { title: '💥 Heads up!', desc: "We're playing in **~25 minutes!**" },
       { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
-      { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
+      { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **~25 minutes!**' }
     ];
     
     const timeoutId = setTimeout(async () => {

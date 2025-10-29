@@ -69,15 +69,15 @@ async function cancelReminder(eventId) {
   }
 }
 
-// Get pending reminders that are due now OR within the next 6 minutes
-// We check 6 minutes ahead to ensure reminders aren't late even if cron runs every 5 min
+// Get pending reminders that are due now OR within the next 20 minutes
+// We check 20 minutes ahead since cron runs every 20 min (better early than late!)
 async function getPendingReminders() {
   const client = getSupabaseClient();
   if (!client) return [];
 
   try {
     const now = new Date();
-    const lookAhead = new Date(now.getTime() + 6 * 60 * 1000); // 6 minutes from now
+    const lookAhead = new Date(now.getTime() + 20 * 60 * 1000); // 20 minutes from now
     
     const { data, error } = await client
       .from('reminders')
