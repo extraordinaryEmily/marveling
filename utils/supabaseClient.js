@@ -69,23 +69,26 @@ async function cancelReminder(eventId) {
   }
 }
 
-// Get pending reminders that should be sent now
+// Get pending reminders that are due now OR within the next 6 minutes
+// We check 6 minutes ahead to ensure reminders aren't late even if cron runs every 5 min
 async function getPendingReminders() {
   const client = getSupabaseClient();
   if (!client) return [];
 
   try {
-    const now = new Date().toISOString();
+    const now = new Date();
+    const lookAhead = new Date(now.getTime() + 6 * 60 * 1000); // 6 minutes from now
     
     const { data, error } = await client
       .from('reminders')
       .select('*')
       .eq('sent', false)
-      .lte('reminder_time', now)
+      .lte('reminder_time', lookAhead.toISOString())
       .order('reminder_time', { ascending: true });
 
     if (error) throw error;
 
+    console.log(`📋 Found ${data?.length || 0} reminder(s) due by ${lookAhead.toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' })} PST`);
     return data || [];
   } catch (error) {
     console.error('❌ Error fetching pending reminders:', error);

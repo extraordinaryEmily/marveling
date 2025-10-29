@@ -29,11 +29,46 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Debug endpoint to see all reminders in Supabase
+app.get('/debug-reminders', async (req, res) => {
+  const { getSupabaseClient } = require('./utils/supabaseClient');
+  const client = getSupabaseClient();
+  
+  if (!client) {
+    return res.json({ error: 'Supabase not configured' });
+  }
+  
+  try {
+    const { data, error } = await client
+      .from('reminders')
+      .select('*')
+      .order('reminder_time', { ascending: true });
+    
+    if (error) throw error;
+    
+    const now = new Date();
+    res.json({
+      currentTime: now.toISOString(),
+      lookAheadTo: new Date(now.getTime() + 6 * 60 * 1000).toISOString(),
+      remindersInDatabase: data || [],
+      count: data?.length || 0
+    });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
 // ========================================
 // Reminder Checking Endpoint (Called by Cron)
 // ========================================
 app.get('/check-reminders', async (req, res) => {
-  console.log('⏰ Checking for pending reminders in Supabase...');
+  const now = new Date();
+  const nowUTC = now.toISOString();
+  const lookAhead = new Date(now.getTime() + 6 * 60 * 1000).toISOString();
+  
+  console.log(`⏰ Checking for pending reminders in Supabase...`);
+  console.log(`   Current time (UTC): ${nowUTC}`);
+  console.log(`   Looking ahead to: ${lookAhead}`);
   
   try {
     // Wait for client to be ready
@@ -53,12 +88,14 @@ app.get('/check-reminders', async (req, res) => {
     const pendingReminders = await getPendingReminders();
     
     if (pendingReminders.length === 0) {
-      console.log('✅ No pending reminders');
+      console.log('✅ No pending reminders found');
       return res.json({ 
         status: 'ok', 
         message: 'No pending reminders',
         checked: 0,
-        sent: 0
+        sent: 0,
+        currentTime: nowUTC,
+        lookingAheadTo: lookAhead
       });
     }
 
@@ -184,11 +221,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             if (client.isReady()) return resolve(true);
             client.once('ready', () => resolve(true));
           }),
-          new Promise((resolve) => setTimeout(() => resolve(false), 5000)) // 5 sec timeout
+          new Promise((resolve) => setTimeout(() => resolve(false), 30000)) // 30 sec timeout
         ]);
         
         if (!ready) {
-          console.error('❌ Client not ready after 5 seconds');
+          console.error('❌ Client not ready after 30 seconds');
           return res.json({
             type: InteractionResponseType.ChannelMessageWithSource,
             data: {
@@ -392,11 +429,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             if (client.isReady()) return resolve(true);
             client.once('ready', () => resolve(true));
           }),
-          new Promise((resolve) => setTimeout(() => resolve(false), 10000)) // 10 sec timeout
+          new Promise((resolve) => setTimeout(() => resolve(false), 30000)) // 30 sec timeout
         ]);
         
         if (!ready) {
-          console.error('❌ Client not ready after 10 seconds');
+          console.error('❌ Client not ready after 30 seconds');
           return res.json({
             type: InteractionResponseType.ChannelMessageWithSource,
             data: {
