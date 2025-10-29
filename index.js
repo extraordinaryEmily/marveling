@@ -100,14 +100,25 @@ app.get('/check-reminders', async (req, res) => {
     
     if (pendingReminders.length === 0) {
       console.log('✅ No pending reminders found');
-      return res.json({ 
+      const response = { 
         status: 'ok', 
         message: 'No pending reminders',
         checked: 0,
         sent: 0,
         currentTime: nowUTC,
         lookingAheadTo: lookAhead
-      });
+      };
+      
+      res.json(response);
+      
+      // Force sleep since nothing to do
+      console.log('💤 No reminders due, going to sleep in 2 seconds...');
+      setTimeout(() => {
+        console.log('😴 Forcing shutdown to save resources...');
+        process.exit(0);
+      }, 2000); // Wait 2 seconds to ensure response is sent
+      
+      return;
     }
 
     console.log(`📬 Found ${pendingReminders.length} pending reminder(s)`);
@@ -183,6 +194,9 @@ app.get('/check-reminders', async (req, res) => {
       sent: sentCount,
       timestamp: new Date().toISOString()
     });
+    
+    // Don't force sleep - reminders were sent, bot should stay awake for events
+    console.log(`✅ Sent ${sentCount} reminder(s), staying awake for events`);
 
   } catch (error) {
     console.error('❌ Error checking reminders:', error);
