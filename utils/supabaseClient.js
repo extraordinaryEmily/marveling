@@ -96,7 +96,7 @@ async function getPendingReminders() {
   }
 }
 
-// Mark reminder as sent
+// Mark reminder as sent (by reminder ID)
 async function markReminderSent(reminderId) {
   const client = getSupabaseClient();
   if (!client) return false;
@@ -113,6 +113,53 @@ async function markReminderSent(reminderId) {
   } catch (error) {
     console.error('❌ Error marking reminder as sent:', error);
     return false;
+  }
+}
+
+// Mark reminder as sent (by event ID) - used by local setTimeout
+async function markReminderSentByEventId(eventId) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('reminders')
+      .update({ sent: true })
+      .eq('event_id', eventId.toString())
+      .eq('sent', false);
+
+    if (error) throw error;
+
+    console.log(`✅ Marked reminder as sent in Supabase for event #${eventId}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error marking reminder as sent by event ID:', error);
+    return false;
+  }
+}
+
+// Check if reminder was already sent (used by local setTimeout to prevent duplicates)
+async function checkIfReminderSent(eventId) {
+  const client = getSupabaseClient();
+  if (!client) return false; // If no Supabase, assume not sent
+
+  try {
+    const { data, error } = await client
+      .from('reminders')
+      .select('sent')
+      .eq('event_id', eventId.toString())
+      .single();
+
+    if (error) {
+      // If no reminder found, return false (not sent)
+      if (error.code === 'PGRST116') return false;
+      throw error;
+    }
+
+    return data?.sent === true;
+  } catch (error) {
+    console.error('❌ Error checking if reminder was sent:', error);
+    return false; // On error, assume not sent to avoid skipping
   }
 }
 
@@ -188,6 +235,8 @@ module.exports = {
   cancelReminder,
   getPendingReminders,
   markReminderSent,
+  markReminderSentByEventId,
+  checkIfReminderSent,
   updateReminder,
   cleanupOrphanedReminders
 };

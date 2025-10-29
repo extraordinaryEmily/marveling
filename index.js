@@ -105,6 +105,16 @@ app.get('/check-reminders', async (req, res) => {
     // Process each reminder
     for (const reminder of pendingReminders) {
       try {
+        // Only send reminders that are actually due NOW or overdue
+        // Don't send ones that are still in the future (prevents duplicates with local setTimeout)
+        const reminderTime = new Date(reminder.reminder_time);
+        const currentTime = new Date();
+        
+        if (reminderTime > currentTime) {
+          console.log(`⏳ Reminder ${reminder.id} not due yet (due at ${reminder.reminder_time}), skipping for now`);
+          continue; // Skip this one for now, will check again next time
+        }
+        
         const channel = await client.channels.fetch(reminder.channel_id);
         
         if (!channel) {
@@ -118,9 +128,30 @@ app.get('/check-reminders', async (req, res) => {
           ? reminder.attendees.map(id => `<@${id}>`).join(' ')
           : 'Everyone';
 
-        // Send the reminder
+        // Random reminder messages (same as helper.js)
+        const reminderMessages = [
+          { title: '⚡ Get on soon!', desc: 'Game night starts in **45 minutes!**' },
+          { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
+          { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **45 minutes!**' },
+          { title: '🔥 Almost time!', desc: 'Game night kicks off in **45 minutes!**' },
+          { title: '💥 Heads up!', desc: "We're playing in **45 minutes!**" },
+          { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
+          { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **45 minutes!**' }
+        ];
+        const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
+
+        const { EmbedBuilder } = require('discord.js');
+        const embed = new EmbedBuilder()
+          .setColor(0xffa500)
+          .setTitle(randomMsg.title)
+          .setDescription(randomMsg.desc)
+          .setImage('https://giffiles.alphacoders.com/223/223284.gif')
+          .addFields({ name: 'Event ID', value: `#${reminder.event_id}` });
+
+        // Send the reminder with embed
         await channel.send({
-          content: `⏰ Time to play! ${attendeeMentions}`,
+          content: `⏰ ${attendeeMentions}`,
+          embeds: [embed],
           allowedMentions: { parse: ['users'] }
         });
 

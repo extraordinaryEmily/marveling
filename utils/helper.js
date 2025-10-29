@@ -185,6 +185,15 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
       const event = getEvent(eventId);
       if (!event) return;
 
+      // Check if reminder was already sent by cron (prevent duplicate)
+      const { checkIfReminderSent } = require('./supabaseClient');
+      const alreadySent = await checkIfReminderSent(eventId);
+      
+      if (alreadySent) {
+        console.log(`⏭️  Reminder for event #${eventId} was already sent by cron, skipping`);
+        return;
+      }
+
       const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
       const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
 
@@ -199,6 +208,12 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
         content: attendeeMentions ? `⏰ ${attendeeMentions}` : `⏰ ${rolePing}`,
         embeds: [embed],
         allowedMentions: { parse: ['users', 'roles'] }
+      });
+      
+      // Mark as sent in Supabase to prevent duplicate from cron
+      const { markReminderSentByEventId } = require('./supabaseClient');
+      await markReminderSentByEventId(eventId).catch(err => {
+        console.error('Failed to mark reminder as sent in Supabase:', err);
       });
     }, delayMs);
 
