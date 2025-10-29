@@ -16,6 +16,17 @@ const { DateTime } = require('luxon');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Track last request time (for idle logging)
+let lastRequestTime = Date.now();
+
+// Middleware to log all requests and update last request time
+app.use((req, res, next) => {
+  lastRequestTime = Date.now();
+  const timestamp = new Date().toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' });
+  console.log(`📨 [${timestamp} PST] ${req.method} ${req.path}`);
+  next();
+});
+
 // Health check endpoint
 app.get('/', (req, res) => {
   res.send('🤖 Marveling Bot is awake and running!');
@@ -571,6 +582,25 @@ app.listen(PORT, () => {
   console.log(`🌐 HTTP server running on port ${PORT}`);
   console.log(`📡 Interactions endpoint: /interactions`);
 });
+
+// Log when process is shutting down (bot going to sleep)
+process.on('SIGTERM', () => {
+  console.log('😴 SIGTERM received - Bot going to sleep...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('😴 SIGINT received - Bot going to sleep...');
+  process.exit(0);
+});
+
+// Log periodic heartbeat to show bot is still awake
+setInterval(() => {
+  const minutesSinceLastRequest = Math.floor((Date.now() - lastRequestTime) / 60000);
+  if (minutesSinceLastRequest >= 5) {
+    console.log(`💤 Bot still awake but idle for ${minutesSinceLastRequest} minute(s)...`);
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
 
 // ========================================
 // Sleep Schedule (2am-10am PST to save Railway credits)
