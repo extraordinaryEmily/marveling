@@ -138,12 +138,54 @@ async function updateReminder(eventId, newReminderTime, newAttendees) {
   }
 }
 
+// Cleanup orphaned reminders (reminders for events that no longer exist)
+async function cleanupOrphanedReminders() {
+  const client = getSupabaseClient();
+  if (!client) return 0;
+
+  try {
+    const { getAllEvents } = require('./eventManager');
+    const events = getAllEvents();
+    const eventIds = Object.keys(events);
+
+    // Get all reminders
+    const { data: allReminders, error } = await client
+      .from('reminders')
+      .select('id, event_id');
+
+    if (error) throw error;
+    if (!allReminders || allReminders.length === 0) return 0;
+
+    // Find orphaned reminders (reminders whose events don't exist)
+    const orphanedIds = allReminders
+      .filter(reminder => !eventIds.includes(reminder.event_id))
+      .map(reminder => reminder.id);
+
+    if (orphanedIds.length === 0) return 0;
+
+    // Delete orphaned reminders
+    const { error: deleteError } = await client
+      .from('reminders')
+      .delete()
+      .in('id', orphanedIds);
+
+    if (deleteError) throw deleteError;
+
+    console.log(`🧹 Cleaned up ${orphanedIds.length} orphaned reminder(s) from Supabase`);
+    return orphanedIds.length;
+  } catch (error) {
+    console.error('❌ Error cleaning up orphaned reminders:', error);
+    return 0;
+  }
+}
+
 module.exports = {
   getSupabaseClient,
   scheduleReminder,
   cancelReminder,
   getPendingReminders,
   markReminderSent,
-  updateReminder
+  updateReminder,
+  cleanupOrphanedReminders
 };
 

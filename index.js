@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { getAllEvents, deleteEvent, cancelReminder, setReminder } = require('./utils/eventManager');
 const { processEventNonResponders, clearEventCredits } = require('./utils/achievementManager');
-const { getPendingReminders, markReminderSent } = require('./utils/supabaseClient');
+const { getPendingReminders, markReminderSent, cleanupOrphanedReminders } = require('./utils/supabaseClient');
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 
@@ -176,13 +176,27 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
     }
     
     try {
-      // Wait for client to be ready
+      // Wait for client to be ready (with timeout)
       if (!client.isReady()) {
         console.log('⏳ Waiting for Discord client to be ready...');
-        await new Promise((resolve) => {
-          if (client.isReady()) return resolve();
-          client.once('ready', resolve);
-        });
+        const ready = await Promise.race([
+          new Promise((resolve) => {
+            if (client.isReady()) return resolve(true);
+            client.once('ready', () => resolve(true));
+          }),
+          new Promise((resolve) => setTimeout(() => resolve(false), 5000)) // 5 sec timeout
+        ]);
+        
+        if (!ready) {
+          console.error('❌ Client not ready after 5 seconds');
+          return res.json({
+            type: InteractionResponseType.ChannelMessageWithSource,
+            data: {
+              content: '❌ Bot is still starting up, please try again in a moment.',
+              flags: MessageFlags.Ephemeral
+            }
+          });
+        }
       }
       
       // Fetch guild and channel objects from cache
@@ -370,13 +384,27 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
     console.log(`🔘 Received button: ${buttonId}`);
     
     try {
-      // Wait for client to be ready
+      // Wait for client to be ready (with timeout)
       if (!client.isReady()) {
         console.log('⏳ Waiting for Discord client to be ready...');
-        await new Promise((resolve) => {
-          if (client.isReady()) return resolve();
-          client.once('ready', resolve);
-        });
+        const ready = await Promise.race([
+          new Promise((resolve) => {
+            if (client.isReady()) return resolve(true);
+            client.once('ready', () => resolve(true));
+          }),
+          new Promise((resolve) => setTimeout(() => resolve(false), 10000)) // 10 sec timeout
+        ]);
+        
+        if (!ready) {
+          console.error('❌ Client not ready after 10 seconds');
+          return res.json({
+            type: InteractionResponseType.ChannelMessageWithSource,
+            data: {
+              content: '❌ Bot is still starting up, please try again in a moment.',
+              flags: MessageFlags.Ephemeral
+            }
+          });
+        }
       }
 
       // Create a mock interaction for button handling
@@ -658,12 +686,15 @@ client.on('messageCreate', async (message) => {
 });
 
 // Start services after bot is ready
-client.once('clientReady', () => {
+client.once('clientReady', async () => {
   console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
   console.log('📨 Message listener active for multi-step commands');
   
   // Run cleanup immediately on startup
   cleanupOldEvents();
+  
+  // Clean up orphaned reminders in Supabase (reminders for deleted events)
+  await cleanupOrphanedReminders();
   
   // Recreate any reminders from saved events
   recreateReminders();
