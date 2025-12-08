@@ -14,10 +14,12 @@ function loadData() {
       const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
       events = data.events || {};
       counter = data.counter || 1000;
-      console.log(`✅ Loaded ${Object.keys(events).length} events from disk`);
+      // [EVENTS] Data loaded (startup)
+      //console.log(`✅ Loaded ${Object.keys(events).length} events from disk`);
     }
   } catch (error) {
-    console.error('❌ Error loading events from disk:', error);
+    // [EVENTS] Error loading data (startup)
+    //console.error('❌ Error loading events from disk:', error);
   }
 }
 
@@ -47,7 +49,8 @@ function saveData() {
     
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
-    console.error('❌ Error saving events to disk:', error);
+    // [EVENTS] Error saving data (periodic auto-save)
+    //console.error('❌ Error saving events to disk:', error);
   }
 }
 

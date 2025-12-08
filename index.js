@@ -19,6 +19,11 @@ const PORT = process.env.PORT || 3000;
 // Track last request time (for idle logging)
 let lastRequestTime = Date.now();
 
+// Debounce for /check-reminders endpoint (prevent concurrent requests)
+let isProcessingReminders = false;
+let lastReminderCheck = 0;
+const REMINDER_CHECK_COOLDOWN = 5000; // 5 seconds cooldown between checks
+
 // Middleware to log all requests and update last request time
 app.use((req, res, next) => {
   lastRequestTime = Date.now();
@@ -76,88 +81,106 @@ app.get('/debug-reminders', async (req, res) => {
 // Reminder Checking Endpoint (Called by Cron)
 // ========================================
 app.get('/check-reminders', async (req, res) => {
-  try {
-    // Wait for client to be ready
-    if (!client.isReady()) {
-      await new Promise((resolve) => {
-        if (client.isReady()) return resolve();
-        const timeout = setTimeout(() => resolve(), 10000); // 10 sec timeout
-        client.once('ready', () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
-    }
-
-    const pendingReminders = await getPendingReminders();
-    
-    if (pendingReminders.length === 0) {
-      return res.status(204).send();
-    }
-
-    let sentCount = 0;
-
-    // Process each reminder
-    for (const reminder of pendingReminders) {
-      try {
-        const reminderTime = new Date(reminder.reminder_time);
-        const currentTime = new Date();
-        
-        if (reminderTime > currentTime) {
-          continue; // Not due yet, skip
-        }
-        
-        const channel = await client.channels.fetch(reminder.channel_id);
-        
-        if (!channel) {
-          await markReminderSent(reminder.id);
-          continue;
-        }
-
-        // Format attendee mentions
-        const attendeeMentions = reminder.attendees && reminder.attendees.length > 0
-          ? reminder.attendees.map(id => `<@${id}>`).join(' ')
-          : 'Everyone';
-
-        // Random reminder messages (same as helper.js)
-        const reminderMessages = [
-          { title: '⚡ Get on soon!', desc: 'Game night starts in **~25 minutes!**' },
-          { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
-          { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **~25 minutes!**' },
-          { title: '🔥 Almost time!', desc: 'Game night kicks off in **~25 minutes!**' },
-          { title: '💥 Heads up!', desc: "We're playing in **~25 minutes!**" },
-          { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
-          { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **~25 minutes!**' }
-        ];
-        const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
-
-        const { EmbedBuilder } = require('discord.js');
-        const embed = new EmbedBuilder()
-          .setColor(0xffa500)
-          .setTitle(randomMsg.title)
-          .setDescription(randomMsg.desc)
-          .setImage('https://giffiles.alphacoders.com/223/223284.gif')
-          .addFields({ name: 'Event ID', value: `#${reminder.event_id}` });
-
-        // Send the reminder with embed
-        await channel.send({
-          content: `⏰ ${attendeeMentions}`,
-          embeds: [embed],
-          allowedMentions: { parse: ['users'] }
-        });
-
-        await markReminderSent(reminder.id);
-        sentCount++;
-      } catch (error) {
-        // Silently skip failed reminders
-      }
-    }
-
-    res.status(204).send();
-
-  } catch (error) {
-    res.status(500).send();
+  // Return immediately to prevent timeout
+  res.status(204).send();
+  
+  // Debounce: prevent concurrent requests
+  const now = Date.now();
+  if (isProcessingReminders || (now - lastReminderCheck < REMINDER_CHECK_COOLDOWN)) {
+    return; // Already processing or too soon
   }
+  
+  isProcessingReminders = true;
+  lastReminderCheck = now;
+  
+  // Process reminders asynchronously (after response sent)
+  (async () => {
+    try {
+      // Wait for client to be ready (with shorter timeout)
+      if (!client.isReady()) {
+        await new Promise((resolve) => {
+          if (client.isReady()) return resolve();
+          const timeout = setTimeout(() => resolve(), 5000); // 5 sec timeout
+          client.once('ready', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      }
+
+      if (!client.isReady()) {
+        isProcessingReminders = false;
+        return; // Client not ready, skip this check
+      }
+
+      const pendingReminders = await getPendingReminders();
+      
+      if (pendingReminders.length === 0) {
+        isProcessingReminders = false;
+        return;
+      }
+
+      const currentTime = new Date();
+
+      // Process each reminder
+      for (const reminder of pendingReminders) {
+        try {
+          const reminderTime = new Date(reminder.reminder_time);
+          
+          if (reminderTime > currentTime) {
+            continue; // Not due yet, skip
+          }
+          
+          const channel = await client.channels.fetch(reminder.channel_id);
+          
+          if (!channel) {
+            await markReminderSent(reminder.id);
+            continue;
+          }
+
+          // Format attendee mentions
+          const attendeeMentions = reminder.attendees && reminder.attendees.length > 0
+            ? reminder.attendees.map(id => `<@${id}>`).join(' ')
+            : 'Everyone';
+
+          // Random reminder messages (same as helper.js)
+          const reminderMessages = [
+            { title: '⚡ Get on soon!', desc: 'Game night starts in **~25 minutes!**' },
+            { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
+            { title: '🦸 Get ready to play!', desc: 'Suit up! Game time in **~25 minutes!**' },
+            { title: '🔥 Almost time!', desc: 'Game night kicks off in **~25 minutes!**' },
+            { title: '💥 Heads up!', desc: "We're playing in **~25 minutes!**" },
+            { title: '🎯 Game time approaching!', desc: 'Lock in! Game starts soon!' },
+            { title: '⚔️ Assemble soon!', desc: 'Heroes needed in **~25 minutes!**' }
+          ];
+          const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
+
+          const { EmbedBuilder } = require('discord.js');
+          const embed = new EmbedBuilder()
+            .setColor(0xffa500)
+            .setTitle(randomMsg.title)
+            .setDescription(randomMsg.desc)
+            .setImage('https://giffiles.alphacoders.com/223/223284.gif')
+            .addFields({ name: 'Event ID', value: `#${reminder.event_id}` });
+
+          // Send the reminder with embed
+          await channel.send({
+            content: `⏰ ${attendeeMentions}`,
+            embeds: [embed],
+            allowedMentions: { parse: ['users'] }
+          });
+
+          await markReminderSent(reminder.id);
+        } catch (error) {
+          // Silently skip failed reminders
+        }
+      }
+    } catch (error) {
+      // Silent error handling
+    } finally {
+      isProcessingReminders = false;
+    }
+  })();
 });
 
 // Load commands
@@ -187,9 +210,11 @@ client.commands = commands;
 
 // Login to Discord (for API access)
 client.login(process.env.DISCORD_TOKEN).then(() => {
-  console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
+  // [STARTUP] Discord client ready
+  //console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
 }).catch(err => {
-  console.error('❌ Failed to login to Discord:', err);
+  // [STARTUP] Discord login failed
+  //console.error('❌ Failed to login to Discord:', err);
 });
 
 // ========================================
@@ -200,7 +225,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
   
   // Handle PING from Discord
   if (interaction.type === InteractionType.Ping) {
-    console.log('✅ Received PING from Discord');
+    // [HTTP] PING from Discord (captured by cron if happens during cron)
+    //console.log('✅ Received PING from Discord');
     return res.json({ type: InteractionResponseType.Pong });
   }
   
@@ -209,7 +235,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
     const commandName = interaction.data.name;
     const command = commands.get(commandName);
     
-    console.log(`📥 Received command: /${commandName}`);
+    // [HTTP] Command received (captured by cron if command runs during cron)
+    //console.log(`📥 Received command: /${commandName}`);
     
     if (!command) {
       return res.json({
@@ -224,7 +251,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
     try {
       // Wait for client to be ready (with timeout)
       if (!client.isReady()) {
-        console.log('⏳ Waiting for Discord client to be ready...');
+        //console.log('⏳ Waiting for Discord client to be ready...');
         const ready = await Promise.race([
           new Promise((resolve) => {
             if (client.isReady()) return resolve(true);
@@ -234,7 +261,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
         ]);
         
         if (!ready) {
-          console.error('❌ Client not ready after 30 seconds');
+          //console.error('❌ Client not ready after 30 seconds');
           return res.json({
             type: InteractionResponseType.ChannelMessageWithSource,
             data: {
@@ -410,7 +437,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
       }
       
     } catch (error) {
-      console.error('❌ Error executing command:', error);
+      // [HTTP] Command execution error (captured by cron)
+      //console.error('❌ Error executing command:', error);
       
       if (!res.headersSent) {
         return res.json({
@@ -427,12 +455,14 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
   // Handle Message Component interactions (buttons, select menus, etc.)
   if (interaction.type === InteractionType.MessageComponent) {
     const buttonId = interaction.data.custom_id;
-    console.log(`🔘 Received button: ${buttonId}`);
+    // [HTTP] Button received (captured by cron if button pressed during cron)
+    //console.log(`🔘 Received button: ${buttonId}`);
     
     try {
       // Wait for client to be ready (with timeout)
       if (!client.isReady()) {
-        console.log('⏳ Waiting for Discord client to be ready...');
+        // [HTTP] Waiting for client ready (button handler) (captured by cron)
+        //console.log('⏳ Waiting for Discord client to be ready...');
         const ready = await Promise.race([
           new Promise((resolve) => {
             if (client.isReady()) return resolve(true);
@@ -442,7 +472,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
         ]);
         
         if (!ready) {
-          console.error('❌ Client not ready after 30 seconds');
+          // [HTTP] Client ready timeout (button handler) (captured by cron)
+          //console.error('❌ Client not ready after 30 seconds');
           return res.json({
             type: InteractionResponseType.ChannelMessageWithSource,
             data: {
@@ -530,7 +561,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
       }
 
     } catch (error) {
-      console.error('❌ Error handling button:', error);
+      // [HTTP] Button handling error (captured by cron)
+      //console.error('❌ Error handling button:', error);
       
       if (!res.headersSent) {
         return res.json({
@@ -546,18 +578,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 HTTP server running on port ${PORT}`);
-  console.log(`📡 Interactions endpoint: /interactions`);
+  // [STARTUP] HTTP server started
+  //console.log(`🌐 HTTP server running on port ${PORT}`);
+  // [STARTUP] Interactions endpoint ready
+  //console.log(`📡 Interactions endpoint: /interactions`);
 });
 
 // Log when process is shutting down (bot going to sleep)
 process.on('SIGTERM', () => {
+  // [SLEEP] Bot going to sleep
   console.log('😴 SIGTERM received - Bot going to sleep...');
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('😴 SIGINT received - Bot going to sleep...');
+  // [SLEEP] Bot going to sleep
+  //console.log('😴 SIGINT received - Bot going to sleep...');
   process.exit(0);
 });
 
@@ -565,7 +601,8 @@ process.on('SIGINT', () => {
 setInterval(() => {
   const minutesSinceLastRequest = Math.floor((Date.now() - lastRequestTime) / 60000);
   if (minutesSinceLastRequest >= 5) {
-    console.log(`💤 Bot still awake but idle for ${minutesSinceLastRequest} minute(s)...`);
+    // [SLEEP] Bot idle heartbeat
+    //console.log(`💤 Bot still awake but idle for ${minutesSinceLastRequest} minute(s)...`);
   }
 }, 5 * 60 * 1000); // Check every 5 minutes
 
@@ -633,19 +670,22 @@ function cleanupOldEvents() {
         const eventEndTime = eventTime.plus({ minutes: 30 });
         
         if (eventEndTime <= now) {
-          console.log(`🧹 Auto-cleaning old event #${eventId} (${event.type})`);
+          // [CLEANUP] Auto-cleaning old event
+          //console.log(`🧹 Auto-cleaning old event #${eventId} (${event.type})`);
           
           // Process non-responders BEFORE deleting
           const nonResponderAchievements = processEventNonResponders(event);
           
           // Log if any achievements were awarded
           if (nonResponderAchievements.length > 0) {
-            console.log(`👻 Cloak's Shadow progress tracked for ${nonResponderAchievements.length} non-responder(s) on event #${eventId}`);
+            // [CLEANUP] Achievement tracking
+            //console.log(`👻 Cloak's Shadow progress tracked for ${nonResponderAchievements.length} non-responder(s) on event #${eventId}`);
             
             // Send achievement notifications if bot is ready
             nonResponderAchievements.forEach(({ userId, achievements }) => {
               achievements.forEach(achievement => {
-                console.log(`  ✨ User ${userId} unlocked ${achievement.emoji} ${achievement.name}!`);
+                // [CLEANUP] Achievement unlocked
+                //console.log(`  ✨ User ${userId} unlocked ${achievement.emoji} ${achievement.name}!`);
               });
             });
           }
@@ -661,7 +701,8 @@ function cleanupOldEvents() {
   }
   
   if (cleanedCount > 0) {
-    console.log(`✅ Cleaned up ${cleanedCount} old event(s)`);
+    // [CLEANUP] Cleanup summary
+    //console.log(`✅ Cleaned up ${cleanedCount} old event(s)`);
   }
 }
 
@@ -689,7 +730,8 @@ function recreateReminders() {
         if (delayMs > 0) {
           const channel = client.channels.cache.get(event.channelId);
           if (!channel) {
-            console.warn(`⚠️ Channel ${event.channelId} not found for event #${eventId}`);
+            // [CLEANUP] Channel not found warning
+            //console.warn(`⚠️ Channel ${event.channelId} not found for event #${eventId}`);
             continue;
           }
           
@@ -709,18 +751,22 @@ function recreateReminders() {
           recreatedCount++;
           
           const minsUntil = Math.round(delayMs / 60000);
+          // [CLEANUP] Reminder recreated
           console.log(`⏰ Recreated reminder for event #${eventId} (fires in ${minsUntil} minutes)`);
         } else {
+          // [CLEANUP] Expired reminder skipped
           console.log(`⏭️  Skipped expired reminder for event #${eventId}`);
         }
       } catch (err) {
-        console.error(`❌ Error recreating reminder for event #${eventId}:`, err);
+        // [CLEANUP] Error recreating reminder
+        //console.error(`❌ Error recreating reminder for event #${eventId}:`, err);
       }
     }
   }
   
   if (recreatedCount > 0) {
-    console.log(`✅ Recreated ${recreatedCount} reminder(s) from saved data`);
+    // [CLEANUP] Reminders recreated summary
+    //console.log(`✅ Recreated ${recreatedCount} reminder(s) from saved data`);
   }
 }
 
@@ -746,14 +792,17 @@ client.on('messageCreate', async (message) => {
 
     // Add more command message handlers here as needed
   } catch (error) {
-    console.error('❌ Error handling message for command:', error);
+    // [MESSAGE_HANDLER] Error handling message
+    //console.error('❌ Error handling message for command:', error);
   }
 });
 
 // Start services after bot is ready
 client.once('clientReady', async () => {
-  console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
-  console.log('📨 Message listener active for multi-step commands');
+  // [STARTUP] Auto-cleanup service started
+  //console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
+  // [STARTUP] Message listener active
+  //console.log('📨 Message listener active for multi-step commands');
   
   // Run cleanup immediately on startup
   cleanupOldEvents();

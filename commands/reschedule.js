@@ -142,7 +142,8 @@ module.exports = {
 
     // Cancel old reminder and delete old event
     cancelReminder(eventId);
-    cancelSupabaseReminder(eventId).catch(err => console.error('Failed to cancel Supabase reminder:', err));
+    // [RESCHEDULE] Error cancelling Supabase reminder
+    cancelSupabaseReminder(eventId).catch(err => {/*console.error('Failed to cancel Supabase reminder:', err)*/});
     clearEventCredits(eventId);
     const oldInvited = [...event.invited];
     deleteEvent(eventId);

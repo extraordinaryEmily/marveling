@@ -34,10 +34,12 @@ function loadData() {
         }
       }
       
-      console.log(`✅ Loaded ${Object.keys(userStats).length} user stats from disk`);
+      // [ACHIEVEMENTS] Data loaded (startup)
+      //console.log(`✅ Loaded ${Object.keys(userStats).length} user stats from disk`);
     }
   } catch (error) {
-    console.error('❌ Error loading achievements from disk:', error);
+    // [ACHIEVEMENTS] Error loading data (startup)
+    //console.error('❌ Error loading achievements from disk:', error);
   }
 }
 
@@ -67,7 +69,8 @@ function saveData() {
     
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
-    console.error('❌ Error saving achievements to disk:', error);
+    // [ACHIEVEMENTS] Error saving data (periodic auto-save)
+    //console.error('❌ Error saving achievements to disk:', error);
   }
 }
 

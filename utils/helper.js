@@ -78,8 +78,10 @@ function validateAndAdjustEventTime(timeString) {
   const now = DateTime.now().setZone('America/Los_Angeles');
   const debugInfo = { input: timeString, currentTimePST: now.toLocaleString(DateTime.DATETIME_FULL) };
 
-  console.log('\n🕓 Validating event time: "' + timeString + '"');
-  console.log('📍 Current time: ' + now.toFormat('MMM dd h:mm a') + ' PST');
+  // [HELPER] Time validation (called by Create/Reschedule)
+  //console.log('\n🕓 Validating event time: "' + timeString + '"');
+  // [HELPER] Current time display (called by Create/Reschedule)
+  //console.log('📍 Current time: ' + now.toFormat('MMM dd h:mm a') + ' PST');
 
   // Use parsePST to get a UTC JS Date that corresponds to the PST wall-clock
   let parsedUtcDate = parsePST(timeString);
@@ -100,12 +102,14 @@ function validateAndAdjustEventTime(timeString) {
   if (finalEventTime < now) {
     if (explicitToday) {
       debugInfo.action = '❌ Rejected — user said today but that time has passed.';
-      console.log('❌ That time has already passed today!');
+      // [HELPER] Time validation failed (called by Create/Reschedule)
+      //console.log('❌ That time has already passed today!');
       return { eventTime: null, debugInfo };
     }
     finalEventTime = finalEventTime.plus({ days: 7 });
     debugInfo.action = '⏩ Adjusted — event was in the past, so added 7 days.';
-    console.log('⏩ Time was in the past, added 7 days');
+    // [HELPER] Time adjusted (called by Create/Reschedule)
+    //console.log('⏩ Time was in the past, added 7 days');
   } else {
     debugInfo.action = '✅ No adjustment needed — event time is in the future.';
   }
@@ -121,7 +125,8 @@ function validateAndAdjustEventTime(timeString) {
   const utcDate = finalEventTime.toUTC().toJSDate();
   debugInfo.finalEventTimeUTC = finalEventTime.toUTC().toFormat('fff');
 
-  console.log('✅ Event set for: ' + finalEventTime.toFormat('EEE MMM dd h:mm a') + ' PST');
+  // [HELPER] Event time validated (called by Create/Reschedule)
+  //console.log('✅ Event set for: ' + finalEventTime.toFormat('EEE MMM dd h:mm a') + ' PST');
 
   return { eventTime: utcDate, debugInfo };
 }
@@ -134,7 +139,8 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   const { eventTime: utcDate, debugInfo } = validateAndAdjustEventTime(timeString);
 
   if (!utcDate) {
-    console.error(`⚠️ Event ${eventId}: invalid time, cannot schedule reminder`);
+    // [REMINDERS] Invalid time warning (called by Create/Reschedule)
+    //console.error(`⚠️ Event ${eventId}: invalid time, cannot schedule reminder`);
     return false;
   }
 
@@ -145,10 +151,12 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
   const delayMs = reminderTime.diff(now).as('milliseconds');
 
   if (delayMs <= 0) {
-    console.log(`⚠️ Event ${eventId}: reminder time has already passed`);
+    // [REMINDERS] Reminder time passed (called by Create/Reschedule)
+    //console.log(`⚠️ Event ${eventId}: reminder time has already passed`);
     return false;
   }
 
+  // [REMINDERS] Reminder scheduled (called by Create/Reschedule)
   console.log('⏰ Reminder set for: ' + reminderTime.toFormat('EEE MMM dd h:mm a') + ' PST\n');
 
   // Store the reminder date and actual event time in the event object
@@ -164,7 +172,8 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
       channel.id,
       event.attendees || []
     ).catch(err => {
-      console.error('Failed to store reminder in Supabase:', err);
+      // [REMINDERS] Supabase storage error (called by Create/Reschedule)
+      //console.error('Failed to store reminder in Supabase:', err);
     });
   }
 
@@ -190,7 +199,8 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
       const alreadySent = await checkIfReminderSent(eventId);
       
       if (alreadySent) {
-        console.log(`⏭️  Reminder for event #${eventId} was already sent by cron, skipping`);
+        // [REMINDERS] Duplicate prevention (called by local setTimeout)
+        //console.log(`⏭️  Reminder for event #${eventId} was already sent by cron, skipping`);
         return;
       }
 
@@ -213,7 +223,8 @@ function scheduleReminder(eventId, timeString, channel, rolePing, creator) {
       // Mark as sent in Supabase to prevent duplicate from cron
       const { markReminderSentByEventId } = require('./supabaseClient');
       await markReminderSentByEventId(eventId).catch(err => {
-        console.error('Failed to mark reminder as sent in Supabase:', err);
+        // [REMINDERS] Error marking sent (called by local setTimeout)
+        //console.error('Failed to mark reminder as sent in Supabase:', err);
       });
     }, delayMs);
 

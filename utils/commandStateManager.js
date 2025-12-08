@@ -24,7 +24,8 @@ function registerCommandState(userId, commandName, collectors = {}, cleanupCallb
     timestamp: Date.now()
   });
   
-  console.log(`[CommandState] User ${userId} started: ${commandName}`);
+  // [COMMAND_STATE] Command started (called by Create/Reschedule)
+  //console.log(`[CommandState] User ${userId} started: ${commandName}`);
 }
 
 /**
@@ -38,7 +39,8 @@ function cancelUserCommand(userId, reason = 'new_command') {
   
   if (!state) return false;
   
-  console.log(`[CommandState] Cancelling ${state.commandName} for user ${userId} (reason: ${reason})`);
+  // [COMMAND_STATE] Command cancelled (called by Create/Reschedule)
+  //console.log(`[CommandState] Cancelling ${state.commandName} for user ${userId} (reason: ${reason})`);
   
   // Stop all collectors
   if (state.collectors) {
@@ -47,7 +49,8 @@ function cancelUserCommand(userId, reason = 'new_command') {
         try {
           collector.stop(reason);
         } catch (error) {
-          console.error(`Error stopping ${type} collector:`, error);
+          // [COMMAND_STATE] Error stopping collector (called by Create/Reschedule)
+          //console.error(`Error stopping ${type} collector:`, error);
         }
       }
     });
@@ -58,7 +61,8 @@ function cancelUserCommand(userId, reason = 'new_command') {
     try {
       state.cleanupCallback(reason);
     } catch (error) {
-      console.error('Error in cleanup callback:', error);
+      // [COMMAND_STATE] Error in cleanup (called by Create/Reschedule)
+      //console.error('Error in cleanup callback:', error);
     }
   }
   
@@ -76,6 +80,7 @@ function cancelUserCommand(userId, reason = 'new_command') {
 function completeUserCommand(userId) {
   const state = userCommandStates.get(userId);
   if (state) {
+    // [COMMAND_STATE] Command completed (called by Create/Reschedule)
     console.log(`[CommandState] User ${userId} completed: ${state.commandName}`);
     userCommandStates.delete(userId);
     return true;
@@ -109,7 +114,8 @@ function cleanupStaleStates() {
   }
   
   if (cleaned > 0) {
-    console.log(`[CommandState] Cleaned up ${cleaned} stale command state(s)`);
+    // [COMMAND_STATE] Stale states cleaned (periodic, every 5 min)
+    //console.log(`[CommandState] Cleaned up ${cleaned} stale command state(s)`);
   }
 }
 

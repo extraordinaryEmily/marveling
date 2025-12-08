@@ -31,7 +31,8 @@ module.exports = {
     
     // Cancel any scheduled reminders
     cancelReminder(id);
-    cancelSupabaseReminder(id).catch(err => console.error('Failed to cancel Supabase reminder:', err));
+    // [DELETE] Error cancelling Supabase reminder
+    cancelSupabaseReminder(id).catch(err => {/*console.error('Failed to cancel Supabase reminder:', err)*/});
     // Clear achievement tracking for this event
     clearEventCredits(id);
     deleteEvent(id);

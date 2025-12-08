@@ -9,7 +9,8 @@ function getSupabaseClient() {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_KEY
     );
-    console.log('✅ Supabase client initialized');
+    // [SUPABASE] Client initialized (startup)
+    //console.log('✅ Supabase client initialized');
   }
   return supabase;
 }
@@ -18,7 +19,8 @@ function getSupabaseClient() {
 async function scheduleReminder(eventId, reminderTime, channelId, attendees) {
   const client = getSupabaseClient();
   if (!client) {
-    console.warn('⚠️ Supabase not configured, skipping reminder scheduling');
+    // [SUPABASE] Not configured warning (called by Create/Reschedule)
+    //console.warn('⚠️ Supabase not configured, skipping reminder scheduling');
     return null;
   }
 
@@ -39,10 +41,12 @@ async function scheduleReminder(eventId, reminderTime, channelId, attendees) {
 
     if (error) throw error;
 
+    // [SUPABASE] Reminder scheduled (called by Create/Reschedule)
     console.log(`✅ Scheduled reminder in Supabase for event #${eventId} at ${reminderTime}`);
     return data;
   } catch (error) {
-    console.error('❌ Error scheduling reminder in Supabase:', error);
+    // [SUPABASE] Error scheduling reminder (called by Create/Reschedule)
+    //console.error('❌ Error scheduling reminder in Supabase:', error);
     return null;
   }
 }
@@ -61,16 +65,19 @@ async function cancelReminder(eventId) {
 
     if (error) throw error;
 
-    console.log(`✅ Cancelled reminder in Supabase for event #${eventId}`);
+    // [SUPABASE] Reminder cancelled (called by Delete/Reschedule)
+    //console.log(`✅ Cancelled reminder in Supabase for event #${eventId}`);
     return true;
   } catch (error) {
-    console.error('❌ Error cancelling reminder in Supabase:', error);
+    // [SUPABASE] Error cancelling reminder (called by Delete/Reschedule)
+    //console.error('❌ Error cancelling reminder in Supabase:', error);
     return false;
   }
 }
 
 // Get pending reminders that are due now OR within the next 20 minutes
 // We check 20 minutes ahead since cron runs every 20 min (better early than late!)
+// Optimized: Only fetch needed fields, not entire table
 async function getPendingReminders() {
   const client = getSupabaseClient();
   if (!client) return [];
@@ -79,12 +86,14 @@ async function getPendingReminders() {
     const now = new Date();
     const lookAhead = new Date(now.getTime() + 20 * 60 * 1000); // 20 minutes from now
     
+    // Only fetch the fields we actually need (not *)
     const { data, error } = await client
       .from('reminders')
-      .select('*')
+      .select('id, event_id, reminder_time, channel_id, attendees')
       .eq('sent', false)
       .lte('reminder_time', lookAhead.toISOString())
-      .order('reminder_time', { ascending: true });
+      .order('reminder_time', { ascending: true })
+      .limit(50); // Limit to 50 reminders max per check
 
     if (error) throw error;
 
@@ -129,10 +138,12 @@ async function markReminderSentByEventId(eventId) {
 
     if (error) throw error;
 
-    console.log(`✅ Marked reminder as sent in Supabase for event #${eventId}`);
+    // [SUPABASE] Reminder marked as sent (called by local setTimeout)
+    //console.log(`✅ Marked reminder as sent in Supabase for event #${eventId}`);
     return true;
   } catch (error) {
-    console.error('❌ Error marking reminder as sent by event ID:', error);
+    // [SUPABASE] Error marking reminder sent (called by local setTimeout)
+    //console.error('❌ Error marking reminder as sent by event ID:', error);
     return false;
   }
 }
@@ -157,7 +168,8 @@ async function checkIfReminderSent(eventId) {
 
     return data?.sent === true;
   } catch (error) {
-    console.error('❌ Error checking if reminder was sent:', error);
+    // [SUPABASE] Error checking reminder status (called by local setTimeout)
+    //console.error('❌ Error checking if reminder was sent:', error);
     return false; // On error, assume not sent to avoid skipping
   }
 }
@@ -179,15 +191,21 @@ async function updateReminder(eventId, newReminderTime, newAttendees) {
 
     if (error) throw error;
 
-    console.log(`✅ Updated reminder in Supabase for event #${eventId}`);
+    // [SUPABASE] Reminder updated (called by Reschedule)
+    //console.log(`✅ Updated reminder in Supabase for event #${eventId}`);
     return true;
   } catch (error) {
-    console.error('❌ Error updating reminder in Supabase:', error);
+    // [SUPABASE] Error updating reminder (called by Reschedule)
+    //console.error('❌ Error updating reminder in Supabase:', error);
     return false;
   }
 }
 
 // Cleanup orphaned reminders (reminders for events that no longer exist)
+// Conservative approach: Only delete reminders that are:
+// 1. Already sent, OR
+// 2. Very old (reminder_time > 24 hours ago) AND orphaned
+// This prevents deleting valid future reminders on bot restart
 async function cleanupOrphanedReminders() {
   const client = getSupabaseClient();
   if (!client) return 0;
@@ -197,17 +215,30 @@ async function cleanupOrphanedReminders() {
     const events = getAllEvents();
     const eventIds = Object.keys(events);
 
-    // Get all reminders
+    // Get all reminders with reminder_time to check age
     const { data: allReminders, error } = await client
       .from('reminders')
-      .select('id, event_id');
+      .select('id, event_id, reminder_time, sent');
 
     if (error) throw error;
     if (!allReminders || allReminders.length === 0) return 0;
 
-    // Find orphaned reminders (reminders whose events don't exist)
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+
+    // Find orphaned reminders that are safe to delete:
+    // - Already sent (sent = true), OR
+    // - Very old (reminder_time > 24 hours ago) AND orphaned
     const orphanedIds = allReminders
-      .filter(reminder => !eventIds.includes(reminder.event_id))
+      .filter(reminder => {
+        const isOrphaned = !eventIds.includes(reminder.event_id);
+        const isSent = reminder.sent === true;
+        const reminderTime = new Date(reminder.reminder_time);
+        const isVeryOld = reminderTime < oneDayAgo;
+        
+        // Only delete if: (sent) OR (orphaned AND very old)
+        return isSent || (isOrphaned && isVeryOld);
+      })
       .map(reminder => reminder.id);
 
     if (orphanedIds.length === 0) return 0;
@@ -220,10 +251,12 @@ async function cleanupOrphanedReminders() {
 
     if (deleteError) throw deleteError;
 
-    console.log(`🧹 Cleaned up ${orphanedIds.length} orphaned reminder(s) from Supabase`);
+    // [SUPABASE] Orphaned reminders cleaned (called on startup)
+    //console.log(`🧹 Cleaned up ${orphanedIds.length} orphaned reminder(s) from Supabase`);
     return orphanedIds.length;
   } catch (error) {
-    console.error('❌ Error cleaning up orphaned reminders:', error);
+    // [SUPABASE] Error cleaning orphaned reminders (called on startup)
+    //console.error('❌ Error cleaning up orphaned reminders:', error);
     return 0;
   }
 }
