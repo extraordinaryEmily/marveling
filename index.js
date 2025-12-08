@@ -82,7 +82,7 @@ app.get('/debug-reminders', async (req, res) => {
 // ========================================
 app.get('/check-reminders', async (req, res) => {
   // Return immediately to prevent timeout
-  res.status(204).send();
+  res.status(200).send("pick your hero or villain, i'm not judging");
   
   // Debounce: prevent concurrent requests
   const now = Date.now();
