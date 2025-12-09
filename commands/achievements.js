@@ -16,16 +16,13 @@ module.exports = {
     let targetUser = interaction.user;
     
     if (userOption) {
-      // If getUser() returned a full user object, use it directly
-      // Otherwise, fetch it from the client
-      if (userOption.username) {
-        targetUser = userOption;
-      } else if (interaction.client) {
+      // Always fetch from client to get a proper User object with methods
+      if (interaction.client && userOption.id) {
         try {
           targetUser = await interaction.client.users.fetch(userOption.id);
         } catch (error) {
-          // Fallback to using the ID if fetch fails
-          targetUser = userOption;
+          // If fetch fails, use the option or fallback to interaction.user
+          targetUser = userOption.id ? userOption : interaction.user;
         }
       } else {
         targetUser = userOption;
@@ -36,10 +33,19 @@ module.exports = {
     const ranks = await getUserRanks(targetUser.id);
 
     // Create the main embed
+    // Handle displayAvatarURL - use method if available, otherwise construct URL
+    const avatarURL = typeof targetUser.displayAvatarURL === 'function' 
+      ? targetUser.displayAvatarURL()
+      : targetUser.avatar 
+        ? `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.${targetUser.avatar?.startsWith('a_') ? 'gif' : 'png'}?size=256`
+        : `https://cdn.discordapp.com/embed/avatars/${(parseInt(targetUser.id) >> 22) % 6}.png`;
+    
+    const username = targetUser.username || targetUser.global_name || 'Unknown User';
+    
     const embed = new EmbedBuilder()
       .setColor(0xff0000)
-      .setTitle(`🏆 ${targetUser.username}'s Achievements`)
-      .setThumbnail(targetUser.displayAvatarURL())
+      .setTitle(`🏆 ${username}'s Achievements`)
+      .setThumbnail(avatarURL)
       .setDescription('**Marvel Rivals Ranking System**')
       .setTimestamp();
 
