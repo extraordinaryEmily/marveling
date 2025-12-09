@@ -12,7 +12,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const targetUser = interaction.options.getUser('user') || interaction.user;
+    const userOption = interaction.options.getUser('user');
+    const targetUser = userOption
+      ? await interaction.client.users.fetch(userOption.id)
+      : interaction.user;
     const stats = await getUserStats(targetUser.id);
     const ranks = await getUserRanks(targetUser.id);
 
