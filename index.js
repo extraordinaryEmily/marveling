@@ -632,7 +632,7 @@ setInterval(checkSleepSchedule, 5 * 60 * 1000);
 // ========================================
 // Auto-Cleanup for Old Events
 // ========================================
-function cleanupOldEvents() {
+async function cleanupOldEvents() {
   const now = DateTime.now().setZone('America/Los_Angeles');
   const events = getAllEvents();
   let cleanedCount = 0;
@@ -707,7 +707,9 @@ function cleanupOldEvents() {
 }
 
 // Run cleanup every 5 minutes
-setInterval(cleanupOldEvents, 5 * 60 * 1000);
+setInterval(() => {
+  cleanupOldEvents().catch(() => {});
+}, 5 * 60 * 1000);
 
 // ========================================
 // Recreate Reminders on Startup
@@ -805,7 +807,7 @@ client.once('clientReady', async () => {
   //console.log('📨 Message listener active for multi-step commands');
   
   // Run cleanup immediately on startup
-  cleanupOldEvents();
+  cleanupOldEvents().catch(() => {});
   
   // Clean up orphaned reminders in Supabase (reminders for deleted events)
   await cleanupOrphanedReminders();
