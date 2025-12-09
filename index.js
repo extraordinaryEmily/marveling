@@ -288,7 +288,16 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
           },
           getUser: (name) => {
             const option = interaction.data.options?.find(opt => opt.name === name);
-            return option?.value ? { id: option.value } : null;
+            if (!option?.value) return null;
+            
+            // Check if user data is in resolved data
+            const resolved = interaction.data.resolved;
+            if (resolved?.users?.[option.value]) {
+              return resolved.users[option.value];
+            }
+            
+            // Fallback - return object with ID
+            return { id: option.value };
           },
           getMentionable: (name) => {
             const option = interaction.data.options?.find(opt => opt.name === name);
@@ -328,6 +337,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
         },
         guild: guild,
         channel: channel,
+        client: client, // Add client for commands that need it
         user: interaction.member?.user || interaction.user,
         member: interaction.member,
         replied: false,

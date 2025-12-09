@@ -13,9 +13,25 @@ module.exports = {
 
   async execute(interaction) {
     const userOption = interaction.options.getUser('user');
-    const targetUser = userOption
-      ? await interaction.client.users.fetch(userOption.id)
-      : interaction.user;
+    let targetUser = interaction.user;
+    
+    if (userOption) {
+      // If getUser() returned a full user object, use it directly
+      // Otherwise, fetch it from the client
+      if (userOption.username) {
+        targetUser = userOption;
+      } else if (interaction.client) {
+        try {
+          targetUser = await interaction.client.users.fetch(userOption.id);
+        } catch (error) {
+          // Fallback to using the ID if fetch fails
+          targetUser = userOption;
+        }
+      } else {
+        targetUser = userOption;
+      }
+    }
+    
     const stats = await getUserStats(targetUser.id);
     const ranks = await getUserRanks(targetUser.id);
 
