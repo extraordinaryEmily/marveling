@@ -1,87 +1,67 @@
 // Achievement tracking system for Marvel Rivals Bot
-const fs = require('fs');
-const path = require('path');
+// Now uses Supabase for persistence instead of JSON file
 
-// File path for persistence
-const DATA_FILE = path.join(__dirname, '../data/achievements.json');
+let userStats = {}; // Cache for user stats (loaded from Supabase)
+let eventRescheduleCount = {}; // Cache for reschedule counts (loaded from Supabase)
 
-let userStats = {};
-
-// Track which users have been credited for which events to prevent farming
-// Structure: { eventId: { userId: Set<'rsvp' | 'maybe' | 'fastRSVP'> } }
-let eventAchievementCredits = {};
-
-// Track reschedule counts for events
-// Structure: { eventId: rescheduleCount }
-let eventRescheduleCount = {};
-
-// Load data from file on startup
-function loadData() {
-  try {
-    if (fs.existsSync(DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-      userStats = data.userStats || {};
-      eventRescheduleCount = data.eventRescheduleCount || {};
-      
-      // Convert achievement credits arrays back to Sets
-      if (data.eventAchievementCredits) {
-        eventAchievementCredits = {};
-        for (const eventId in data.eventAchievementCredits) {
-          eventAchievementCredits[eventId] = {};
-          for (const userId in data.eventAchievementCredits[eventId]) {
-            eventAchievementCredits[eventId][userId] = new Set(data.eventAchievementCredits[eventId][userId]);
-          }
-        }
-      }
-      
-      // [ACHIEVEMENTS] Data loaded (startup)
-      //console.log(`✅ Loaded ${Object.keys(userStats).length} user stats from disk`);
-    }
-  } catch (error) {
-    // [ACHIEVEMENTS] Error loading data (startup)
-    //console.error('❌ Error loading achievements from disk:', error);
-  }
-}
-
-// Save data to file
-function saveData() {
-  try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // Convert Sets to arrays for JSON serialization
-    const creditsForSave = {};
-    for (const eventId in eventAchievementCredits) {
-      creditsForSave[eventId] = {};
-      for (const userId in eventAchievementCredits[eventId]) {
-        creditsForSave[eventId][userId] = Array.from(eventAchievementCredits[eventId][userId]);
-      }
-    }
-    
-    const data = {
-      userStats,
-      eventAchievementCredits: creditsForSave,
-      eventRescheduleCount,
-      lastSaved: new Date().toISOString()
+// Load user stats from Supabase (called on demand, not on startup)
+async function loadUserStatsFromSupabase(userId) {
+  const {
+    getUserStatsFromSupabase
+  } = require('./supabaseClient');
+  
+  const stats = await getUserStatsFromSupabase(userId);
+  if (stats) {
+    userStats[userId] = {
+      hostsCreated: stats.hosts_created,
+      invitesSent: stats.invites_sent,
+      rsvpsMade: stats.rsvps_made,
+      maybeCount: stats.maybe_count,
+      fastRSVPs: stats.fast_rsvps,
+      worthyEvents: stats.worthy_events,
+      noResponseCount: stats.no_response_count,
+      recentHostTimestamps: stats.recent_host_timestamps || [],
+      achievements: stats.achievements || []
     };
-    
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  } catch (error) {
-    // [ACHIEVEMENTS] Error saving data (periodic auto-save)
-    //console.error('❌ Error saving achievements to disk:', error);
   }
 }
 
-// Auto-save every 30 seconds
-setInterval(saveData, 30000);
+// Save user stats to Supabase
+async function saveUserStatsToSupabase(userId) {
+  if (!userStats[userId]) return;
+  
+  const {
+    updateUserStatsInSupabase
+  } = require('./supabaseClient');
+  
+  await updateUserStatsInSupabase(userId, userStats[userId]);
+}
 
-// Load data on module initialization
-loadData();
+// Initialize user stats if they don't exist (loads from Supabase if available)
+async function ensureUser(userId) {
+  if (!userStats[userId]) {
+    await loadUserStatsFromSupabase(userId);
+    
+    // If still not found, create default stats
+    if (!userStats[userId]) {
+      userStats[userId] = {
+        hostsCreated: 0,
+        invitesSent: 0,
+        rsvpsMade: 0,
+        maybeCount: 0,
+        fastRSVPs: 0,
+        worthyEvents: 0,
+        noResponseCount: 0,
+        recentHostTimestamps: [],
+        achievements: []
+      };
+      await saveUserStatsToSupabase(userId);
+    }
+  }
+}
 
-// Initialize user stats if they don't exist
-function ensureUser(userId) {
+// Synchronous version for backward compatibility (loads from cache)
+function ensureUserSync(userId) {
   if (!userStats[userId]) {
     userStats[userId] = {
       hostsCreated: 0,
@@ -94,75 +74,91 @@ function ensureUser(userId) {
       recentHostTimestamps: [],
       achievements: []
     };
-    saveData();
+    // Save async in background
+    saveUserStatsToSupabase(userId).catch(() => {});
   }
 }
 
 // Check if user has already been credited for this achievement type on this event
-function hasBeenCredited(eventId, userId, achievementType) {
-  if (!eventAchievementCredits[eventId]) return false;
-  if (!eventAchievementCredits[eventId][userId]) return false;
-  return eventAchievementCredits[eventId][userId].has(achievementType);
+async function hasBeenCredited(eventId, userId, achievementType) {
+  const {
+    checkEventAchievementCredit
+  } = require('./supabaseClient');
+  
+  return await checkEventAchievementCredit(eventId, userId, achievementType);
+}
+
+// Synchronous version (checks cache, but Supabase is source of truth)
+function hasBeenCreditedSync(eventId, userId, achievementType) {
+  // For backward compatibility, return false and let async check happen
+  return false;
 }
 
 // Mark user as credited for this achievement type on this event
-function markAsCredited(eventId, userId, achievementType) {
-  if (!eventAchievementCredits[eventId]) {
-    eventAchievementCredits[eventId] = {};
-  }
-  if (!eventAchievementCredits[eventId][userId]) {
-    eventAchievementCredits[eventId][userId] = new Set();
-  }
-  eventAchievementCredits[eventId][userId].add(achievementType);
+async function markAsCredited(eventId, userId, achievementType) {
+  const {
+    markEventAchievementCredit
+  } = require('./supabaseClient');
+  
+  await markEventAchievementCredit(eventId, userId, achievementType);
 }
 
 // Clean up event tracking when event is deleted/completed
-function clearEventCredits(eventId) {
-  delete eventAchievementCredits[eventId];
-  saveData();
+async function clearEventCredits(eventId) {
+  const {
+    clearEventCreditsFromSupabase
+  } = require('./supabaseClient');
+  
+  await clearEventCreditsFromSupabase(eventId);
 }
 
-// Get user stats
-function getUserStats(userId) {
-  ensureUser(userId);
+// Get user stats (loads from Supabase if not in cache)
+async function getUserStats(userId) {
+  await ensureUser(userId);
+  return userStats[userId];
+}
+
+// Synchronous version (uses cache, may be stale)
+function getUserStatsSync(userId) {
+  ensureUserSync(userId);
   return userStats[userId];
 }
 
 // Track when user creates an event
-function trackHostCreated(userId) {
-  ensureUser(userId);
+async function trackHostCreated(userId) {
+  await ensureUser(userId);
   userStats[userId].hostsCreated++;
   const achievements = checkHostAchievements(userId);
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return achievements;
 }
 
 // Track when user invites someone
-function trackInviteSent(userId, count = 1) {
-  ensureUser(userId);
+async function trackInviteSent(userId, count = 1) {
+  await ensureUser(userId);
   userStats[userId].invitesSent += count;
   const achievements = checkRecruiterAchievements(userId);
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return achievements;
 }
 
 // Track when user RSVPs to an event
-function trackRSVP(userId, eventId = null) {
+async function trackRSVP(userId, eventId = null) {
   // If eventId is provided, check if user has already been credited
-  if (eventId && hasBeenCredited(eventId, userId, 'rsvp')) {
+  if (eventId && await hasBeenCredited(eventId, userId, 'rsvp')) {
     return []; // Already credited for this event
   }
   
-  ensureUser(userId);
+  await ensureUser(userId);
   userStats[userId].rsvpsMade++;
   
   // Mark as credited for this event
   if (eventId) {
-    markAsCredited(eventId, userId, 'rsvp');
+    await markAsCredited(eventId, userId, 'rsvp');
   }
   
   const achievements = checkResponderAchievements(userId);
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return achievements;
 }
 
@@ -270,8 +266,8 @@ function checkResponderAchievements(userId) {
 }
 
 // Get user's current rank for each category
-function getUserRanks(userId) {
-  const stats = getUserStats(userId);
+async function getUserRanks(userId) {
+  const stats = await getUserStats(userId);
   
   const getHighestRank = (tiers, count) => {
     let currentRank = null;
@@ -297,8 +293,8 @@ function getUserRanks(userId) {
 }
 
 // Get all achievements for a user
-function getUserAchievements(userId) {
-  const stats = getUserStats(userId);
+async function getUserAchievements(userId) {
+  const stats = await getUserStats(userId);
   return stats.achievements;
 }
 
@@ -364,90 +360,90 @@ const LEGENDARY_ACHIEVEMENTS = {
 };
 
 // Check for Moon Knight achievement (midnight-4am event creation)
-function checkMoonKnight(userId, hour) {
-  const stats = getUserStats(userId);
+async function checkMoonKnight(userId, hour) {
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.MOON_KNIGHT.id;
   
   if ((hour >= 0 && hour < 4) && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.MOON_KNIGHT];
   }
   return [];
 }
 
 // Check for Wakanda Strategist (20+ days in advance)
-function checkWakandaStrategist(userId, daysInAdvance) {
-  const stats = getUserStats(userId);
+async function checkWakandaStrategist(userId, daysInAdvance) {
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.WAKANDA_STRATEGIST.id;
   
   if (daysInAdvance >= 20 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.WAKANDA_STRATEGIST];
   }
   return [];
 }
 
 // Track "Maybe" responses
-function trackMaybe(userId, eventId = null) {
+async function trackMaybe(userId, eventId = null) {
   // If eventId is provided, check if user has already been credited
-  if (eventId && hasBeenCredited(eventId, userId, 'maybe')) {
+  if (eventId && await hasBeenCredited(eventId, userId, 'maybe')) {
     return []; // Already credited for this event
   }
   
-  ensureUser(userId);
+  await ensureUser(userId);
   userStats[userId].maybeCount++;
   
   // Mark as credited for this event
   if (eventId) {
-    markAsCredited(eventId, userId, 'maybe');
+    await markAsCredited(eventId, userId, 'maybe');
   }
   
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.GOD_OF_MISCHIEF.id;
   
   if (stats.maybeCount >= 20 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.GOD_OF_MISCHIEF];
   }
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return [];
 }
 
 // Track fast RSVP (within 30 seconds)
-function trackFastRSVP(userId, eventId = null) {
+async function trackFastRSVP(userId, eventId = null) {
   // If eventId is provided, check if user has already been credited
-  if (eventId && hasBeenCredited(eventId, userId, 'fastRSVP')) {
+  if (eventId && await hasBeenCredited(eventId, userId, 'fastRSVP')) {
     return []; // Already credited for this event
   }
   
-  ensureUser(userId);
+  await ensureUser(userId);
   userStats[userId].fastRSVPs++;
   
   // Mark as credited for this event
   if (eventId) {
-    markAsCredited(eventId, userId, 'fastRSVP');
+    await markAsCredited(eventId, userId, 'fastRSVP');
   }
   
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.BULLSEYE.id;
   
   if (stats.fastRSVPs >= 1 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.BULLSEYE];
   }
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return [];
 }
 
 // Track host frequency (5 events in 7 days)
-function trackHostWithTimestamp(userId) {
-  ensureUser(userId);
+async function trackHostWithTimestamp(userId) {
+  await ensureUser(userId);
   const now = Date.now();
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   
   // Add current timestamp
   stats.recentHostTimestamps.push(now);
@@ -460,118 +456,122 @@ function trackHostWithTimestamp(userId) {
   
   if (stats.recentHostTimestamps.length >= 5 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.AGAIN_X5];
   }
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return [];
 }
 
 // Track worthy events (5+ RSVPs)
-function trackWorthyEvent(userId) {
-  ensureUser(userId);
+async function trackWorthyEvent(userId) {
+  await ensureUser(userId);
   userStats[userId].worthyEvents++;
   
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.WORTHY.id;
   
   if (stats.worthyEvents >= 3 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.WORTHY];
   }
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return [];
 }
 
 // Get legendary achievements for a user
-function getLegendaryAchievements(userId) {
-  const stats = getUserStats(userId);
+async function getLegendaryAchievements(userId) {
+  const stats = await getUserStats(userId);
   return Object.values(LEGENDARY_ACHIEVEMENTS).filter(achievement => 
     stats.achievements.includes(achievement.id)
   );
 }
 
 // Track no-response for Cloak's Shadow achievement
-function trackNoResponse(userId) {
-  ensureUser(userId);
+async function trackNoResponse(userId) {
+  await ensureUser(userId);
   userStats[userId].noResponseCount++;
   
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.CLOAKS_SHADOW.id;
   
   if (stats.noResponseCount >= 50 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.CLOAKS_SHADOW];
   }
-  saveData();
+  await saveUserStatsToSupabase(userId);
   return [];
 }
 
 // Process event completion and check for non-responders
 // This should be called when an event is deleted or expires
-function processEventNonResponders(event) {
+async function processEventNonResponders(event) {
   if (!event || !event.invited) return [];
   
   const newAchievements = []; // Array of { userId, achievements }
   
-  // Get all users who responded to this event
-  const responders = new Set();
-  if (eventAchievementCredits[event.id]) {
-    Object.keys(eventAchievementCredits[event.id]).forEach(userId => {
-      responders.add(userId);
-    });
-  }
+  // Get all users who responded to this event from Supabase
+  const {
+    getEventRespondersFromSupabase
+  } = require('./supabaseClient');
+  
+  const responders = await getEventRespondersFromSupabase(event.id);
   
   // Check each invited user to see if they responded
-  event.invited.forEach(userId => {
+  for (const userId of event.invited) {
     // Skip the event creator (they don't need to RSVP to their own event)
-    if (userId === event.creatorId) return;
+    if (userId === event.creatorId) continue;
     
     // If user didn't respond, track it
     if (!responders.has(userId)) {
-      const achievements = trackNoResponse(userId);
+      const achievements = await trackNoResponse(userId);
       if (achievements.length > 0) {
         newAchievements.push({ userId, achievements });
       }
     }
-  });
+  }
   
   return newAchievements;
 }
 
 // Track event reschedule and check for Eye of Agamotto achievement
-function trackReschedule(userId, oldEventId, newEventId) {
-  ensureUser(userId);
+async function trackReschedule(userId, oldEventId, newEventId) {
+  await ensureUser(userId);
   
-  // Get the current reschedule count for the old event
-  const currentCount = eventRescheduleCount[oldEventId] || 0;
+  const {
+    getEventRescheduleCountFromSupabase,
+    updateEventRescheduleCountInSupabase,
+    clearEventRescheduleCountFromSupabase
+  } = require('./supabaseClient');
+  
+  // Get the current reschedule count for the old event from Supabase
+  const currentCount = await getEventRescheduleCountFromSupabase(oldEventId);
   const newCount = currentCount + 1;
   
-  // Store the count for the new event ID
-  eventRescheduleCount[newEventId] = newCount;
+  // Store the count for the new event ID in Supabase
+  await updateEventRescheduleCountInSupabase(newEventId, newCount);
   
-  // Clean up the old event's count
-  delete eventRescheduleCount[oldEventId];
+  // Clean up the old event's count from Supabase
+  await clearEventRescheduleCountFromSupabase(oldEventId);
   
   // Check if user earned the Eye of Agamotto achievement
-  const stats = getUserStats(userId);
+  const stats = await getUserStats(userId);
   const achievementId = LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO.id;
   
   if (newCount >= 5 && !stats.achievements.includes(achievementId)) {
     stats.achievements.push(achievementId);
-    saveData();
+    await saveUserStatsToSupabase(userId);
     return [LEGENDARY_ACHIEVEMENTS.EYE_OF_AGAMOTTO];
   }
   
-  saveData();
   return [];
 }
 
 // Check for Avengers Assemble achievement (everyone with @rivaling tag RSVPs)
 // Returns array of { userId, achievements } for all users who earned the achievement
-function checkAvengersAssemble(event) {
+async function checkAvengersAssemble(event) {
   if (!event || !event.invited || !event.attendees) return [];
   
   // Need at least 2 people (excluding creator) for this achievement
@@ -591,21 +591,18 @@ function checkAvengersAssemble(event) {
   const newAchievements = [];
   
   // Award to all attendees who don't have it yet
-  event.attendees.forEach(userId => {
-    ensureUser(userId);
-    const stats = getUserStats(userId);
+  for (const userId of event.attendees) {
+    await ensureUser(userId);
+    const stats = await getUserStats(userId);
     
     if (!stats.achievements.includes(achievementId)) {
       stats.achievements.push(achievementId);
+      await saveUserStatsToSupabase(userId);
       newAchievements.push({
         userId,
         achievements: [LEGENDARY_ACHIEVEMENTS.AVENGERS_ASSEMBLE]
       });
     }
-  });
-  
-  if (newAchievements.length > 0) {
-    saveData();
   }
   
   return newAchievements;
@@ -613,6 +610,7 @@ function checkAvengersAssemble(event) {
 
 module.exports = {
   getUserStats,
+  getUserStatsSync, // Synchronous version for backward compatibility
   trackHostCreated,
   trackInviteSent,
   trackRSVP,

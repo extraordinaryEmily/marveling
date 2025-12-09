@@ -259,7 +259,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
     return available < 0.4 || conflict > 0.5 || suggestNew >= 0.25;
   };
 
-  collector.on('collect', (reaction, user) => {
+  collector.on('collect', async (reaction, user) => {
     counts[reaction.emoji.name]++;
     
     const event = getEvent(id);
@@ -269,21 +269,21 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
       addAttendee(id, user.id);
       
       // Track RSVP achievement (only for Available) - pass eventId to prevent farming
-      const rsvpAchievements = trackRSVP(user.id, id);
+      const rsvpAchievements = await trackRSVP(user.id, id);
       achievements.push(...rsvpAchievements);
       
       // Check for fast RSVP (within 30 seconds, not your own event)
       if (event && user.id !== event.creatorId) {
         const timeSinceCreation = (Date.now() - event.createdAt) / 1000; // seconds
         if (timeSinceCreation <= 30) {
-          const bullseyeAchievements = trackFastRSVP(user.id, id);
+          const bullseyeAchievements = await trackFastRSVP(user.id, id);
           achievements.push(...bullseyeAchievements);
         }
       }
       
       // Check for Worthy achievement (5+ RSVPs on host's event)
       if (event && event.attendees.length >= 5) {
-        const worthyAchievements = trackWorthyEvent(event.creatorId);
+        const worthyAchievements = await trackWorthyEvent(event.creatorId);
         if (worthyAchievements.length > 0) {
           const worthyText = worthyAchievements.map(a => `<@${event.creatorId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
           msg.channel.send(worthyText).catch(() => {});
@@ -292,7 +292,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
       
       // Check for Avengers Assemble achievement (everyone RSVPs)
       if (event) {
-        const avengersAchievements = checkAvengersAssemble(event);
+        const avengersAchievements = await checkAvengersAssemble(event);
         if (avengersAchievements.length > 0) {
           const avengersText = avengersAchievements.map(({ userId, achievements }) => 
             achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n')
@@ -306,7 +306,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
     }
     else if (reaction.emoji.name === '🤔') {
       // Track Maybe responses - pass eventId to prevent farming
-      const maybeAchievements = trackMaybe(user.id, id);
+      const maybeAchievements = await trackMaybe(user.id, id);
       achievements.push(...maybeAchievements);
     }
     
@@ -389,7 +389,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         // Cancel old reminder and delete old event and message
         cancelReminder(id);
         cancelSupabaseReminder(id).catch(err => console.error('Failed to cancel Supabase reminder:', err));
-        clearEventCredits(id);
+        await clearEventCredits(id);
         deleteEvent(id);
         await msg.delete().catch(() => {});
         
@@ -410,7 +410,7 @@ function setupRSVPCollector(msg, interaction, rolePing, id, role, eventType, tim
         addInvited(newId, interaction.user.id);
 
         // Track reschedule and check for Eye of Agamotto achievement
-        const rescheduleAchievements = trackReschedule(interaction.user.id, id, newId);
+        const rescheduleAchievements = await trackReschedule(interaction.user.id, id, newId);
 
         // Send new event message
         const newEmbed = new EmbedBuilder()

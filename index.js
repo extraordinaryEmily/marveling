@@ -674,7 +674,7 @@ function cleanupOldEvents() {
           //console.log(`🧹 Auto-cleaning old event #${eventId} (${event.type})`);
           
           // Process non-responders BEFORE deleting
-          const nonResponderAchievements = processEventNonResponders(event);
+          const nonResponderAchievements = await processEventNonResponders(event);
           
           // Log if any achievements were awarded
           if (nonResponderAchievements.length > 0) {
@@ -692,7 +692,7 @@ function cleanupOldEvents() {
           
           // Clean up the event
           cancelReminder(eventId);
-          clearEventCredits(eventId);
+          await clearEventCredits(eventId);
           deleteEvent(eventId);
           cleanedCount++;
         }

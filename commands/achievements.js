@@ -13,8 +13,8 @@ module.exports = {
 
   async execute(interaction) {
     const targetUser = interaction.options.getUser('user') || interaction.user;
-    const stats = getUserStats(targetUser.id);
-    const ranks = getUserRanks(targetUser.id);
+    const stats = await getUserStats(targetUser.id);
+    const ranks = await getUserRanks(targetUser.id);
 
     // Create the main embed
     const embed = new EmbedBuilder()
@@ -77,7 +77,7 @@ module.exports = {
     const statsValue = `${stats.hostsCreated} Hosted • ${stats.invitesSent} Invited • ${stats.rsvpsMade} RSVPs`;
     
     // Legendary achievements
-    const legendaryAchievements = getLegendaryAchievements(targetUser.id);
+    const legendaryAchievements = await getLegendaryAchievements(targetUser.id);
     
     // Add divider to stats if legendary exists
     embed.addFields({

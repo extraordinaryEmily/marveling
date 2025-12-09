@@ -261,6 +261,249 @@ async function cleanupOrphanedReminders() {
   }
 }
 
+// ========================================
+// Achievement Management Functions
+// ========================================
+
+// Get user stats from Supabase
+async function getUserStatsFromSupabase(userId) {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const { data, error } = await client
+      .from('user_stats')
+      .select('*')
+      .eq('user_id', userId.toString())
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // User doesn't exist, return default stats
+        return {
+          user_id: userId.toString(),
+          hosts_created: 0,
+          invites_sent: 0,
+          rsvps_made: 0,
+          maybe_count: 0,
+          fast_rsvps: 0,
+          worthy_events: 0,
+          no_response_count: 0,
+          recent_host_timestamps: [],
+          achievements: []
+        };
+      }
+      throw error;
+    }
+
+    return {
+      user_id: data.user_id,
+      hosts_created: data.hosts_created || 0,
+      invites_sent: data.invites_sent || 0,
+      rsvps_made: data.rsvps_made || 0,
+      maybe_count: data.maybe_count || 0,
+      fast_rsvps: data.fast_rsvps || 0,
+      worthy_events: data.worthy_events || 0,
+      no_response_count: data.no_response_count || 0,
+      recent_host_timestamps: data.recent_host_timestamps || [],
+      achievements: data.achievements || []
+    };
+  } catch (error) {
+    //console.error('❌ Error getting user stats from Supabase:', error);
+    return null;
+  }
+}
+
+// Update user stats in Supabase (upsert)
+async function updateUserStatsInSupabase(userId, stats) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('user_stats')
+      .upsert({
+        user_id: userId.toString(),
+        hosts_created: stats.hostsCreated || 0,
+        invites_sent: stats.invitesSent || 0,
+        rsvps_made: stats.rsvpsMade || 0,
+        maybe_count: stats.maybeCount || 0,
+        fast_rsvps: stats.fastRSVPs || 0,
+        worthy_events: stats.worthyEvents || 0,
+        no_response_count: stats.noResponseCount || 0,
+        recent_host_timestamps: stats.recentHostTimestamps || [],
+        achievements: stats.achievements || []
+      }, {
+        onConflict: 'user_id'
+      });
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    //console.error('❌ Error updating user stats in Supabase:', error);
+    return false;
+  }
+}
+
+// Check if user has been credited for an achievement type on an event
+async function checkEventAchievementCredit(eventId, userId, creditType) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { data, error } = await client
+      .from('event_achievement_credits')
+      .select('id')
+      .eq('event_id', eventId.toString())
+      .eq('user_id', userId.toString())
+      .eq('credit_type', creditType)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return false; // Not found = not credited
+      throw error;
+    }
+
+    return !!data; // Return true if found
+  } catch (error) {
+    //console.error('❌ Error checking event achievement credit:', error);
+    return false;
+  }
+}
+
+// Mark user as credited for an achievement type on an event
+async function markEventAchievementCredit(eventId, userId, creditType) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('event_achievement_credits')
+      .insert({
+        event_id: eventId.toString(),
+        user_id: userId.toString(),
+        credit_type: creditType
+      })
+      .select();
+
+    if (error) {
+      // Ignore duplicate key errors (already credited)
+      if (error.code === '23505') return true;
+      throw error;
+    }
+
+    return true;
+  } catch (error) {
+    //console.error('❌ Error marking event achievement credit:', error);
+    return false;
+  }
+}
+
+// Clear all achievement credits for an event
+async function clearEventCreditsFromSupabase(eventId) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('event_achievement_credits')
+      .delete()
+      .eq('event_id', eventId.toString());
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    //console.error('❌ Error clearing event credits from Supabase:', error);
+    return false;
+  }
+}
+
+// Get all users who responded to an event (for non-responder tracking)
+async function getEventRespondersFromSupabase(eventId) {
+  const client = getSupabaseClient();
+  if (!client) return new Set();
+
+  try {
+    const { data, error } = await client
+      .from('event_achievement_credits')
+      .select('user_id')
+      .eq('event_id', eventId.toString());
+
+    if (error) throw error;
+
+    return new Set(data.map(row => row.user_id));
+  } catch (error) {
+    //console.error('❌ Error getting event responders from Supabase:', error);
+    return new Set();
+  }
+}
+
+// Get event reschedule count
+async function getEventRescheduleCountFromSupabase(eventId) {
+  const client = getSupabaseClient();
+  if (!client) return 0;
+
+  try {
+    const { data, error } = await client
+      .from('event_reschedule_count')
+      .select('reschedule_count')
+      .eq('event_id', eventId.toString())
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return 0; // Not found = 0
+      throw error;
+    }
+
+    return data?.reschedule_count || 0;
+  } catch (error) {
+    //console.error('❌ Error getting event reschedule count from Supabase:', error);
+    return 0;
+  }
+}
+
+// Update event reschedule count (upsert)
+async function updateEventRescheduleCountInSupabase(eventId, count) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('event_reschedule_count')
+      .upsert({
+        event_id: eventId.toString(),
+        reschedule_count: count
+      }, {
+        onConflict: 'event_id'
+      });
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    //console.error('❌ Error updating event reschedule count in Supabase:', error);
+    return false;
+  }
+}
+
+// Delete event reschedule count
+async function clearEventRescheduleCountFromSupabase(eventId) {
+  const client = getSupabaseClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from('event_reschedule_count')
+      .delete()
+      .eq('event_id', eventId.toString());
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    //console.error('❌ Error clearing event reschedule count from Supabase:', error);
+    return false;
+  }
+}
+
 module.exports = {
   getSupabaseClient,
   scheduleReminder,
@@ -270,6 +513,16 @@ module.exports = {
   markReminderSentByEventId,
   checkIfReminderSent,
   updateReminder,
-  cleanupOrphanedReminders
+  cleanupOrphanedReminders,
+  // Achievement functions
+  getUserStatsFromSupabase,
+  updateUserStatsInSupabase,
+  checkEventAchievementCredit,
+  markEventAchievementCredit,
+  clearEventCreditsFromSupabase,
+  getEventRespondersFromSupabase,
+  getEventRescheduleCountFromSupabase,
+  updateEventRescheduleCountInSupabase,
+  clearEventRescheduleCountFromSupabase
 };
 

@@ -138,13 +138,13 @@ module.exports = {
     const rolePing = role ? `<@&${role.id}>` : '@rivaling';
 
     // Process non-responders before deleting the event
-    const nonResponderAchievements = processEventNonResponders(event);
+    const nonResponderAchievements = await processEventNonResponders(event);
 
     // Cancel old reminder and delete old event
     cancelReminder(eventId);
     // [RESCHEDULE] Error cancelling Supabase reminder
     cancelSupabaseReminder(eventId).catch(err => {/*console.error('Failed to cancel Supabase reminder:', err)*/});
-    clearEventCredits(eventId);
+    await clearEventCredits(eventId);
     const oldInvited = [...event.invited];
     deleteEvent(eventId);
 
@@ -153,7 +153,7 @@ module.exports = {
     oldInvited.forEach(userId => addInvited(newId, userId));
 
     // Track reschedule and check for Eye of Agamotto achievement
-    const rescheduleAchievements = trackReschedule(message.author.id, eventId, newId);
+    const rescheduleAchievements = await trackReschedule(message.author.id, eventId, newId);
 
     // Send new event message
     const newEmbed = new EmbedBuilder()

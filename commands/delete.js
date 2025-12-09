@@ -27,14 +27,14 @@ module.exports = {
     }
 
     // Process non-responders before deleting the event
-    const nonResponderAchievements = processEventNonResponders(event);
+    const nonResponderAchievements = await processEventNonResponders(event);
     
     // Cancel any scheduled reminders
     cancelReminder(id);
     // [DELETE] Error cancelling Supabase reminder
     cancelSupabaseReminder(id).catch(err => {/*console.error('Failed to cancel Supabase reminder:', err)*/});
     // Clear achievement tracking for this event
-    clearEventCredits(id);
+    await clearEventCredits(id);
     deleteEvent(id);
     
     await interaction.reply(`🗑️ Event #${id} has been deleted.`);

@@ -79,7 +79,7 @@ module.exports = {
       const id = createEvent(interaction.user.id, 'now', Date.now());
       
       // Track achievements
-      const achievements = trackHostCreated(interaction.user.id);
+      const achievements = await trackHostCreated(interaction.user.id);
       
       // Check Moon Knight (midnight-4am PST)
       const pstHour = new Date().toLocaleString('en-US', { 
@@ -88,11 +88,11 @@ module.exports = {
         hour12: false 
       });
       const hour = parseInt(pstHour);
-      const moonKnight = checkMoonKnight(interaction.user.id, hour);
+      const moonKnight = await checkMoonKnight(interaction.user.id, hour);
       achievements.push(...moonKnight);
       
       // Track host frequency (5 in 7 days)
-      const againAchievement = trackHostWithTimestamp(interaction.user.id);
+      const againAchievement = await trackHostWithTimestamp(interaction.user.id);
       achievements.push(...againAchievement);
       
       if (achievements.length > 0) {
@@ -217,13 +217,13 @@ module.exports = {
     const id = createEvent(message.author.id, 'planned', time);
 
     // Track achievements
-    const achievements = trackHostCreated(message.author.id);
+    const achievements = await trackHostCreated(message.author.id);
     const pstHour = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false });
-    achievements.push(...checkMoonKnight(message.author.id, parseInt(pstHour)));
+    achievements.push(...(await checkMoonKnight(message.author.id, parseInt(pstHour))));
 
     const daysInAdvance = (utcDate - Date.now()) / (1000 * 60 * 60 * 24);
-    achievements.push(...checkWakandaStrategist(message.author.id, daysInAdvance));
-    achievements.push(...trackHostWithTimestamp(message.author.id));
+    achievements.push(...(await checkWakandaStrategist(message.author.id, daysInAdvance)));
+    achievements.push(...(await trackHostWithTimestamp(message.author.id)));
 
     if (achievements.length > 0) {
       const achievementText = achievements.map(a => `<@${message.author.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
