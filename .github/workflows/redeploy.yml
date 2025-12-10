@@ -1,0 +1,12 @@
+name: Redeploy
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"  # every 20 minutes
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger redeploy
+        run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
