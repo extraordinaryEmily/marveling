@@ -13,9 +13,8 @@ const {
   addInvited,
   cancelReminder
 } = require('../utils/eventManager');
-const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder } = require('../utils/helper');
+const { isValidDateTime, validateAndAdjustEventTime } = require('../utils/helper');
 const { clearEventCredits, processEventNonResponders, trackReschedule } = require('../utils/achievementManager');
-const { registerCommandState, completeUserCommand } = require('../utils/commandStateManager');
 const { cancelReminder: cancelSupabaseReminder } = require('../utils/supabaseClient');
 
 module.exports = {
@@ -74,31 +73,26 @@ module.exports = {
     const result = validateAndAdjustEventTime(newTime);
 
     if (!result.eventTime) {
-      const errorMsg = result.debugInfo.explicitToday 
-        ? `❌ That time has already passed today! (All times are PST)`
-        : `❌ Unable to schedule for that time. Please try a different time.`;
-      return interaction.reply({ 
-        content: errorMsg, 
-        flags: MessageFlags.Ephemeral 
-      });
+      return interaction.reply({ content: `❌ Unable to schedule for that time. Please try a different time.`, flags: MessageFlags.Ephemeral });
     }
 
     await interaction.deferReply();
 
     try {
-      // Fetch guild and channel
-      const guild = await interaction.client.guilds.fetch(interaction.guild.id);
-      const channel = await interaction.client.channels.fetch(interaction.channel.id);
-      const roles = await guild.roles.fetch();
-      const role = roles.find(r => r.name === 'rivaling');
-      const rolePing = role ? `<@&${role.id}>` : '@rivaling';
+      // ------------------------
+      // [Gateway-free rewrite starts here]
+      // ------------------------
+
+      // Role ping from .env instead of fetching
+      const rolePing = `<@&${process.env.RIVALING_ROLE_ID}>`;
 
       // Process non-responders before deleting the event
       const nonResponderAchievements = await processEventNonResponders(event);
 
       // Cancel old reminder and delete old event
       cancelReminder(eventId);
-      cancelSupabaseReminder(eventId).catch(err => {/* Silent error */});
+      cancelSupabaseReminder(eventId).catch(() => {});
+
       await clearEventCredits(eventId);
       const oldInvited = [...event.invited];
       deleteEvent(eventId);
@@ -143,8 +137,9 @@ module.exports = {
           .setStyle(ButtonStyle.Primary)
       );
 
-      await channel.send({
-        content: `🔁 <@${interaction.user.id}> **rescheduled event #${eventId}!**\n🗓 **New Time:** ${newTime} (PST)\n${rolePing}`,
+      // Send reply via interaction instead of channel.send
+      await interaction.editReply({
+        content: `🔁 <@${interaction.user.id}> rescheduled event #${eventId}!\n🗓 New Time: ${newTime} (PST)\n${rolePing}`,
         embeds: [newEmbed],
         components: [buttons],
         allowedMentions: { parse: ['roles'] }
@@ -156,29 +151,24 @@ module.exports = {
       // Send achievement notifications for non-responders
       if (nonResponderAchievements.length > 0) {
         for (const { userId, achievements } of nonResponderAchievements) {
-          const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-          await channel.send(achievementText).catch(() => {});
+          const text = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+          await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral });
         }
       }
 
       // Send achievement notification for reschedule achievement
       if (rescheduleAchievements.length > 0) {
-        const achievementText = rescheduleAchievements.map(a => 
-          `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`
-        ).join('\n');
-        await channel.send(achievementText).catch(() => {});
+        const text = rescheduleAchievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+        await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral });
       }
-      
-      await interaction.editReply({ 
-        content: `✅ Event #${eventId} has been rescheduled to #${newId}!`, 
-      });
-      
-    } catch (error) {
-      console.error('Error rescheduling event:', error);
-      await interaction.editReply({
-        content: '❌ Failed to reschedule event: ' + error.message
-      });
+
+      // ------------------------
+      // [Gateway-free rewrite ends here]
+      // ------------------------
+
+    } catch (err) {
+      console.error('Error rescheduling event:', err);
+      await interaction.editReply({ content: '❌ Failed to reschedule event: ' + err.message });
     }
   }
 };
-

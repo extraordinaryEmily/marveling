@@ -174,7 +174,8 @@ The bot automatically saves all data (events, achievements, user stats) to local
 /create type:planned time:tomorrow at 8pm
 ```
 
-**Invite friends:**
+**Invite friends:**  
+Doesn't give a external link anymore
 ```
 /invite id:1001 person:@friend
 /invite id:1001 guest:+2

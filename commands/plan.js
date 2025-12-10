@@ -12,7 +12,8 @@ const {
   addAttendee,
   removeAttendee
 } = require('../utils/eventManager');
-const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder } = require('../utils/helper');
+const { isValidDateTime, validateAndAdjustEventTime } = require('../utils/helper');
+const { scheduleReminder: scheduleSupabaseReminder } = require('../utils/supabaseClient');
 const { trackHostCreated, checkMoonKnight, checkWakandaStrategist, trackHostWithTimestamp } = require('../utils/achievementManager');
 
 module.exports = {
@@ -51,14 +52,8 @@ module.exports = {
     await interaction.deferReply();
 
     try {
-      // Fetch guild and channel using API (no cache)
-      const guild = await interaction.client.guilds.fetch(interaction.guild.id);
-      const channel = await interaction.client.channels.fetch(interaction.channel.id);
-      
-      // Fetch roles to find 'rivaling' role
-      const roles = await guild.roles.fetch();
-      const role = roles.find(r => r.name === 'rivaling');
-      const rolePing = role ? `<@&${role.id}>` : '@rivaling';
+      // Get role ID from environment (no gateway fetch)
+      const rolePing = process.env.RIVALING_ROLE_ID ? `<@&${process.env.RIVALING_ROLE_ID}>` : '@rivaling';
 
       const id = createEvent(interaction.user.id, 'planned', time);
 
@@ -71,23 +66,8 @@ module.exports = {
       achievements.push(...(await checkWakandaStrategist(interaction.user.id, daysInAdvance)));
       achievements.push(...(await trackHostWithTimestamp(interaction.user.id)));
 
-      if (achievements.length > 0) {
-        const achievementText = achievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-        await channel.send(achievementText);
-      }
-
-      // Add host as invited
+      // Add host as invited (others will self-RSVP via buttons)
       addInvited(id, interaction.user.id);
-      
-      // Fetch members with the role and add them as invited
-      if (role) {
-        const members = await guild.members.fetch();
-        members.forEach(member => {
-          if (member.roles.cache.has(role.id)) {
-            addInvited(id, member.id);
-          }
-        });
-      }
 
       const embed = new EmbedBuilder()
         .setColor(0xff0000)
@@ -121,18 +101,27 @@ module.exports = {
           .setStyle(ButtonStyle.Primary)
       );
 
-      await channel.send({
-        content: `${rolePing} — <@${interaction.user.id}> is planning a game night!\n🗓 **Time:** ${time} (PST)`,
+      // Send via interaction response (gateway-free)
+      await interaction.editReply({
+        content: `${rolePing} — <@${interaction.user.id}> is planning a game night!\n🗓 **Time:** ${time} (PST)\n\n✅ Event #${id} created!`,
         embeds: [embed],
-        components: [buttons],
-        allowedMentions: { parse: ['roles'] }
+        components: [buttons]
       });
 
-      scheduleReminder(id, time, channel, rolePing, { id: interaction.user.id });
+      // Schedule reminder in Supabase (no local timeout)
+      const { DateTime } = require('luxon');
+      const { eventTime: utcDate } = validateAndAdjustEventTime(time);
+      if (utcDate) {
+        const eventTime = DateTime.fromJSDate(utcDate).setZone('America/Los_Angeles');
+        const reminderTime = eventTime.minus({ minutes: 25 });
+        await scheduleSupabaseReminder(id, reminderTime.toISO(), interaction.channel.id, []);
+      }
       
-      await interaction.editReply({ 
-        content: '✅ Game night planned! Check the channel.', 
-      });
+      // Send achievements as followUp if any
+      if (achievements.length > 0) {
+        const achievementText = achievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+        await interaction.followUp({ content: achievementText });
+      }
       
     } catch (error) {
       console.error('Error creating planned event:', error);

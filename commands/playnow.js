@@ -23,14 +23,8 @@ module.exports = {
     await interaction.deferReply();
 
     try {
-      // Fetch guild and channel using API (no cache)
-      const guild = await interaction.client.guilds.fetch(interaction.guild.id);
-      const channel = await interaction.client.channels.fetch(interaction.channel.id);
-      
-      // Fetch roles to find 'rivaling' role
-      const roles = await guild.roles.fetch();
-      const role = roles.find(r => r.name === 'rivaling');
-      const rolePing = role ? `<@&${role.id}>` : '@rivaling';
+      // Get role ID from environment (no gateway fetch)
+      const rolePing = process.env.RIVALING_ROLE_ID ? `<@&${process.env.RIVALING_ROLE_ID}>` : '@rivaling';
 
       const id = createEvent(interaction.user.id, 'now', Date.now());
       
@@ -51,24 +45,8 @@ module.exports = {
       const againAchievement = await trackHostWithTimestamp(interaction.user.id);
       achievements.push(...againAchievement);
       
-      if (achievements.length > 0) {
-        const achievementText = achievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-        await channel.send(achievementText);
-      }
-      
-      // Add host as invited
+      // Add host as invited (others will self-RSVP via buttons)
       addInvited(id, interaction.user.id);
-      
-      // Fetch members with the role and add them as invited
-      if (role) {
-        await guild.members.fetch();
-        const members = await guild.members.fetch();
-        members.forEach(member => {
-          if (member.roles.cache.has(role.id)) {
-            addInvited(id, member.id);
-          }
-        });
-      }
 
       const embed = new EmbedBuilder()
         .setColor(0x00aeff)
@@ -93,16 +71,18 @@ module.exports = {
           .setStyle(ButtonStyle.Danger)
       );
 
-      await channel.send({
-        content: `${rolePing} — <@${interaction.user.id}> needs heroes! **Assemble NOW!**`,
+      // Send via interaction response (gateway-free)
+      await interaction.editReply({
+        content: `${rolePing} — <@${interaction.user.id}> needs heroes! **Assemble NOW!**\n\n✅ Play now event #${id} created!`,
         embeds: [embed],
-        components: [buttons],
-        allowedMentions: { parse: ['roles'] }
+        components: [buttons]
       });
       
-      await interaction.editReply({ 
-        content: '✅ Play now event created! Check the channel.', 
-      });
+      // Send achievements as followUp if any
+      if (achievements.length > 0) {
+        const achievementText = achievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+        await interaction.followUp({ content: achievementText });
+      }
       
     } catch (error) {
       console.error('Error creating play now event:', error);

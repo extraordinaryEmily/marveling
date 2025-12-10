@@ -98,12 +98,7 @@ module.exports = {
       }
     }
 
-    const invite = await interaction.channel.createInvite({
-      maxAge: 3600,
-      maxUses: guestCount,
-      unique: true,
-    });
-
+    // Track guest locally, no Discord invite link
     addGuest(id, interaction.user.id, interaction.user.username, guestCount);
 
     // Track achievement
@@ -114,12 +109,7 @@ module.exports = {
       replyText += `\n\n${achievementText}`;
     }
 
-    await interaction.reply(replyText);
-
-    return interaction.followUp({
-      content: `Here's the invite link (valid 1 hour):\n${invite.url}`,
-      flags: MessageFlags.Ephemeral
-    });
+    return interaction.reply(replyText);
   },
 };
 

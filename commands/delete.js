@@ -1,5 +1,8 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { deleteEvent, getEvent, cancelReminder } = require('../utils/eventManager');
+const { deleteEvent, getEvent } = require('../utils/eventManager'); 
+// ⬆️ Removed cancelReminder (no timers in Workers/serverless)
+
+// Achievement utils stay the same
 const { clearEventCredits, processEventNonResponders } = require('../utils/achievementManager');
 const { cancelReminder: cancelSupabaseReminder } = require('../utils/supabaseClient');
 
@@ -26,14 +29,20 @@ module.exports = {
       return interaction.reply({ content: `🚫 You're not allowed to delete this event.`, flags: MessageFlags.Ephemeral });
     }
 
-    // Process non-responders before deleting the event
+    // ----------------------------
+    // Here is the first major fix
+    // ----------------------------
+
+    // Process non-responders BEFORE deletion
     const nonResponderAchievements = await processEventNonResponders(event);
-    
-    // Cancel any scheduled reminders
-    cancelReminder(id);
-    cancelSupabaseReminder(id).catch(err => {/* Silent error */});
-    
-    // Clear achievement tracking for this event
+
+    // ❌ Removed: cancelReminder(id)
+    // Because eventManager no longer stores timeoutIds
+
+    // ✔ You can KEEP supabase canceling IF your reminders are database-driven
+    cancelSupabaseReminder(id).catch(() => { /* silent */ });
+
+    // Clear achievement progress for this event
     await clearEventCredits(id);
     deleteEvent(id);
     

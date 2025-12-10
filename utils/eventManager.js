@@ -70,10 +70,10 @@ function createEvent(creatorId, type, time = null) {
     invited: [],      // invited inside server users
     attendees: [],    // confirmed RSVP ✅
     guests: [],       // outside server guests
-    reminderTimeoutId: null,  // for scheduled reminders
-    channelId: null,  // channel to send reminder in
-    messageId: null,  // original message ID
-    createdAt: Date.now()  // timestamp for achievement tracking
+    createdAt: Date.now(),  // timestamp for achievement tracking
+    channelId: null,  // for reminder sending
+    eventTimeIso: null,  // ISO timestamp of event time
+    reminderTime: null   // ISO timestamp of reminder time
   };
   saveData();
   return id;
@@ -151,22 +151,13 @@ function listGuests(id) {
   return { invited: event.invited, attendees: event.attendees, guests: event.guests };
 }
 
-// Reminder management
-function setReminder(id, timeoutId, channelId, messageId) {
+// Store event metadata (channelId, timestamps) - no timeouts in serverless
+function setEventMetadata(id, channelId, eventTimeIso, reminderTimeIso) {
   const event = getEvent(id);
   if (!event) return false;
-  event.reminderTimeoutId = timeoutId;
   event.channelId = channelId;
-  event.messageId = messageId;
-  saveData();
-  return true;
-}
-
-function cancelReminder(id) {
-  const event = getEvent(id);
-  if (!event || !event.reminderTimeoutId) return false;
-  clearTimeout(event.reminderTimeoutId);
-  event.reminderTimeoutId = null;
+  event.eventTimeIso = eventTimeIso;
+  event.reminderTime = reminderTimeIso;
   saveData();
   return true;
 }
@@ -183,6 +174,5 @@ module.exports = {
   addGuest,
   getUserGuestCount,
   listGuests,
-  setReminder,
-  cancelReminder
+  setEventMetadata
 };

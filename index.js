@@ -1,74 +1,15 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Partials, MessageFlags, InteractionType, InteractionResponseType } = require('discord.js');
+const { Collection, MessageFlags, InteractionType, InteractionResponseType } = require('discord.js');
 const express = require('express');
 const { verifyKeyMiddleware } = require('discord-interactions');
 const fs = require('fs');
 const path = require('path');
-const { getAllEvents, deleteEvent, cancelReminder, setReminder } = require('./utils/eventManager');
+const { getAllEvents, deleteEvent } = require('./utils/eventManager');
 const { processEventNonResponders, clearEventCredits } = require('./utils/achievementManager');
 const { getPendingReminders, markReminderSent, cleanupOrphanedReminders } = require('./utils/supabaseClient');
-const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 
-// Test WebSocket connectivity to Discord Gateway
-console.log('🔌 Testing WebSocket connectivity to Discord Gateway...');
-try {
-  let WebSocket;
-  try {
-    WebSocket = require('ws');
-    console.log('✅ WebSocket module loaded');
-  } catch (wsError) {
-    console.log('⚠️ ws module not found, trying to use from discord.js...');
-    // Try to get ws from discord.js dependencies
-    try {
-      const discordJsPath = require.resolve('discord.js');
-      const discordJsDir = require('path').dirname(discordJsPath);
-      WebSocket = require(require('path').join(discordJsDir, '../ws'));
-    } catch (e) {
-      console.error('❌ Could not load WebSocket module:', e.message);
-      WebSocket = null;
-    }
-  }
-  
-  if (WebSocket) {
-    console.log('🔌 Creating WebSocket connection to Discord Gateway...');
-    const ws = new WebSocket('wss://gateway.discord.gg/?v=10&encoding=json');
-    
-    ws.on('open', () => {
-      console.log('✅ WebSocket OPENED - Network connectivity OK');
-      ws.close();
-    });
-    
-    ws.on('message', (msg) => {
-      const msgStr = msg.toString();
-      console.log('📨 WS MESSAGE (first 200 chars):', msgStr.substring(0, 200));
-    });
-    
-    ws.on('error', (err) => {
-      console.error('❌ WS ERROR:', err.message);
-      console.error('❌ WS ERROR CODE:', err.code);
-      console.error('❌ WS ERROR TYPE:', err.type);
-    });
-    
-    ws.on('close', (code, reason) => {
-      console.log(`🔌 WebSocket CLOSED - Code: ${code}, Reason: ${reason ? reason.toString() : 'none'}`);
-    });
-    
-    // Timeout after 5 seconds
-    setTimeout(() => {
-      if (ws.readyState === WebSocket.CONNECTING) {
-        console.log('⏰ WebSocket test timeout (5s) - connection still pending');
-        console.log('⏰ WebSocket readyState:', ws.readyState);
-        ws.close();
-      }
-    }, 5000);
-  } else {
-    console.log('⚠️ Skipping WebSocket test - module not available');
-  }
-} catch (error) {
-  console.error('❌ Failed to test WebSocket:', error.message);
-  console.error('❌ Error stack:', error.stack);
-}
+console.log('🚀 Starting Marveling Bot (HTTP-only mode, no Gateway)...');
 
 // ========================================
 // Express Server (HTTP Interactions Endpoint)
@@ -155,26 +96,9 @@ app.get('/check-reminders', async (req, res) => {
   isProcessingReminders = true;
   lastReminderCheck = now;
   
-  // Process reminders asynchronously (after response sent)
+  // Process reminders asynchronously using Discord API (no gateway)
   (async () => {
     try {
-      // Wait for client to be ready (with shorter timeout)
-      if (!client.isReady()) {
-        await new Promise((resolve) => {
-          if (client.isReady()) return resolve();
-          const timeout = setTimeout(() => resolve(), 5000); // 5 sec timeout
-          client.once('ready', () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-        });
-      }
-
-      if (!client.isReady()) {
-        isProcessingReminders = false;
-        return; // Client not ready, skip this check
-      }
-
       const pendingReminders = await getPendingReminders();
       
       if (pendingReminders.length === 0) {
@@ -184,7 +108,7 @@ app.get('/check-reminders', async (req, res) => {
 
       const currentTime = new Date();
 
-      // Process each reminder
+      // Process each reminder using Discord REST API
       for (const reminder of pendingReminders) {
         try {
           const reminderTime = new Date(reminder.reminder_time);
@@ -192,20 +116,13 @@ app.get('/check-reminders', async (req, res) => {
           if (reminderTime > currentTime) {
             continue; // Not due yet, skip
           }
-          
-          const channel = await client.channels.fetch(reminder.channel_id);
-          
-          if (!channel) {
-            await markReminderSent(reminder.id);
-            continue;
-          }
 
           // Format attendee mentions
           const attendeeMentions = reminder.attendees && reminder.attendees.length > 0
             ? reminder.attendees.map(id => `<@${id}>`).join(' ')
             : 'Everyone';
 
-          // Random reminder messages (same as helper.js)
+          // Random reminder messages
           const reminderMessages = [
             { title: '⚡ Get on soon!', desc: 'Game night starts in **~25 minutes!**' },
             { title: '🎮 Start updating!', desc: 'Make sure your game is up to date!' },
@@ -217,6 +134,7 @@ app.get('/check-reminders', async (req, res) => {
           ];
           const randomMsg = reminderMessages[Math.floor(Math.random() * reminderMessages.length)];
 
+          // Send via Discord REST API (no client needed)
           const { EmbedBuilder } = require('discord.js');
           const embed = new EmbedBuilder()
             .setColor(0xffa500)
@@ -225,16 +143,23 @@ app.get('/check-reminders', async (req, res) => {
             .setImage('https://giffiles.alphacoders.com/223/223284.gif')
             .addFields({ name: 'Event ID', value: `#${reminder.event_id}` });
 
-          // Send the reminder with embed
-          await channel.send({
-            content: `⏰ ${attendeeMentions}`,
-            embeds: [embed],
-            allowedMentions: { parse: ['users'] }
+          await fetch(`https://discord.com/api/v10/channels/${reminder.channel_id}/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+            },
+            body: JSON.stringify({
+              content: `⏰ ${attendeeMentions}`,
+              embeds: [embed.toJSON()],
+              allowed_mentions: { parse: ['users'] }
+            })
           });
 
           await markReminderSent(reminder.id);
         } catch (error) {
           // Silently skip failed reminders
+          await markReminderSent(reminder.id);
         }
       }
     } catch (error) {
@@ -255,167 +180,19 @@ for (const file of commandFiles) {
   commands.set(command.data.name, command);
 }
 
-// Initialize Discord client (for API calls, not Gateway)
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildMembers,
-  ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
-});
+console.log(`✅ Loaded ${commands.size} command(s)`);
 
-client.commands = commands;
-
-// Set up ready event listener BEFORE login (critical!)
-console.log('🔧 Setting up ready event listener...');
-console.log('🔧 Event listeners before setup:', client.listenerCount('ready'));
-
-client.once('ready', () => {
-  console.log('🟢 ONCE READY HANDLER FIRED!');
-  // Log immediately - don't wait for async code
-  console.log(`🎉 Discord client ready as ${client.user.tag}`);
-  console.log(`🎉 Bot ID: ${client.user.id}`);
-  console.log(`🎉 Bot username: ${client.user.username}`);
-  console.log(`🎉 Bot discriminator: ${client.user.discriminator}`);
-  console.log(`🎉 Client uptime: ${client.uptime}ms`);
-  console.log(`🎉 WS status: ${client.ws?.status}`);
-  console.log(`🎉 WS ping: ${client.ws?.ping}ms`);
-  
-  // Run async startup code in background (don't await)
-  (async () => {
-    try {
-      console.log('🚀 Starting async startup services...');
-      // [STARTUP] Auto-cleanup service started
-      //console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
-      // [STARTUP] Message listener active
-      //console.log('📨 Message listener active for multi-step commands');
-      
-      // Run cleanup immediately on startup
-      cleanupOldEvents().catch(() => {});
-      
-      // Clean up orphaned reminders in Supabase (reminders for deleted events)
-      await cleanupOrphanedReminders();
-      
-      // Recreate any reminders from saved events
-      recreateReminders();
-      console.log('✅ Async startup services completed');
-    } catch (error) {
-      // Log but don't block - bot is still ready
-      console.error('❌ Error in startup services:', error);
-      console.error('❌ Error stack:', error.stack);
-    }
-  })();
-});
-
-// Also listen for ready with 'on' to catch if 'once' doesn't work
-client.on('ready', () => {
-  console.log('🟢 ON READY HANDLER FIRED!');
-  console.log('🟢 Ready event fired (on listener)');
-  console.log('🟢 Client user:', client.user?.tag || 'null');
-});
-
-console.log('✅ Ready listeners set up. Count:', client.listenerCount('ready'));
-
-// Login to Discord (for API access)
-console.log('🔐 Attempting to login to Discord...');
-console.log('🔑 Token exists:', !!process.env.DISCORD_TOKEN);
-console.log('🔑 Token length:', process.env.DISCORD_TOKEN?.length || 0);
-console.log('🔑 Token preview:', process.env.DISCORD_TOKEN?.substring(0, 10) + '...' || 'null');
-console.log('🔑 Node version:', process.version);
-console.log('🔑 Platform:', process.platform);
-console.log('🔑 Arch:', process.arch);
-
-// Log client state before login
-console.log('📊 Pre-login client state:', {
-  isReady: client.isReady(),
-  user: client.user?.tag || 'null',
-  wsStatus: client.ws?.status || 'null',
-  listenerCount: client.listenerCount('ready')
-});
-
-// Set a timeout to detect if login hangs
-const loginTimeout = setTimeout(() => {
-  console.log('⏰ Login timeout (10s) - checking client state...');
-  console.log('⏰ Client ready?', client.isReady());
-  console.log('⏰ Client user?', client.user?.tag || 'null');
-  console.log('⏰ WS status?', client.ws?.status || 'null');
-  console.log('⏰ WS ping?', client.ws?.ping || 'null');
-  console.log('⏰ Ready listeners?', client.listenerCount('ready'));
-}, 10000); // 10 second timeout
-
-console.log('🚀 Calling client.login()...');
-const loginPromise = client.login(process.env.DISCORD_TOKEN);
-
-console.log('📝 Login promise created, waiting for resolution...');
-
-loginPromise
-  .then(() => {
-    clearTimeout(loginTimeout);
-    console.log('✅ Login promise RESOLVED');
-    console.log('✅ Client ready state:', client.isReady());
-    console.log('✅ Client user:', client.user?.tag || 'null');
-    console.log('✅ WS status:', client.ws?.status || 'null');
-    console.log('✅ WS ping:', client.ws?.ping || 'null');
-  })
-  .catch(err => {
-    clearTimeout(loginTimeout);
-    // [STARTUP] Discord login failed
-    console.error('❌ Login promise REJECTED');
-    console.error('❌ Failed to login to Discord:', err);
-    console.error('❌ Error name:', err.name);
-    console.error('❌ Error message:', err.message);
-    console.error('❌ Error code:', err.code);
-    console.error('❌ Error stack:', err.stack);
-  });
-
-// Also listen for error events
-client.on('error', (error) => {
-  console.error('❌ Discord client ERROR event:', error);
-  console.error('❌ Error name:', error.name);
-  console.error('❌ Error message:', error.message);
-  console.error('❌ Error stack:', error.stack);
-});
-
-client.on('warn', (warning) => {
-  console.warn('⚠️ Discord client WARN event:', warning);
-});
-
-client.on('disconnect', (event) => {
-  console.log('🔌 Discord client DISCONNECT event');
-  console.log('🔌 Close code:', event.code);
-  console.log('🔌 Close reason:', event.reason);
-});
-
-client.on('reconnecting', () => {
-  console.log('🔄 Discord client RECONNECTING event');
-});
-
-client.on('shardReady', (id) => {
-  console.log(`🟢 Shard READY event - Shard ID: ${id}`);
-});
-
-client.on('shardError', (error, id) => {
-  console.error(`❌ Shard ERROR event - Shard ID: ${id}`, error);
-});
-
-client.on('shardDisconnect', (event, id) => {
-  console.log(`🔌 Shard DISCONNECT event - Shard ID: ${id}`, event.code);
-});
-
-client.on('shardReconnecting', (id) => {
-  console.log(`🔄 Shard RECONNECTING event - Shard ID: ${id}`);
-});
-
-// Log when WebSocket opens
-if (client.ws) {
-  console.log('📡 WebSocket manager exists');
-} else {
-  console.log('⚠️ WebSocket manager does not exist yet');
-}
+// Run startup tasks (gateway-free)
+(async () => {
+  try {
+    console.log('🧹 Running startup cleanup...');
+    await cleanupOldEvents();
+    await cleanupOrphanedReminders();
+    console.log('✅ Startup cleanup completed');
+  } catch (error) {
+    console.error('❌ Error in startup tasks:', error);
+  }
+})();
 
 // ========================================
 // Discord Interactions Endpoint (HTTP)
@@ -449,34 +226,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
     }
     
     try {
-      // Wait for client to be ready (with timeout)
-      if (!client.isReady()) {
-        //console.log('⏳ Waiting for Discord client to be ready...');
-        const ready = await Promise.race([
-          new Promise((resolve) => {
-            if (client.isReady()) return resolve(true);
-            client.once('ready', () => resolve(true));
-          }),
-          new Promise((resolve) => setTimeout(() => resolve(false), 30000)) // 30 sec timeout
-        ]);
-        
-        if (!ready) {
-          //console.error('❌ Client not ready after 30 seconds');
-          return res.json({
-            type: InteractionResponseType.ChannelMessageWithSource,
-            data: {
-              content: '❌ Bot is still starting up, please try again in a moment.',
-              flags: MessageFlags.Ephemeral
-            }
-          });
-        }
-      }
-      
-      // Fetch guild and channel objects from cache
-      const guild = await client.guilds.fetch(interaction.guild_id);
-      const channel = await client.channels.fetch(interaction.channel_id);
-      
-      // Create a mock interaction object that works with existing command handlers
+      // Create a mock interaction object that works with existing command handlers (no client needed)
       const mockInteraction = {
         ...interaction,
         isChatInputCommand: () => true,
@@ -504,7 +254,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             if (!option?.value) return null;
             
             // Mentionable can be a user or role
-            // Discord sends the ID in the value, and the resolved data in interaction.data.resolved
             const resolved = interaction.data.resolved;
             
             // Check if it's a user
@@ -516,11 +265,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
                 user: userData,
                 member: memberData
               };
-            }
-            
-            // Check if it's a role
-            if (resolved?.roles?.[option.value]) {
-              return guild.roles.cache.get(option.value);
             }
             
             // Fallback - just return an object with the ID
@@ -535,9 +279,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             return option?.value || null;
           }
         },
-        guild: guild,
-        channel: channel,
-        client: client, // Add client for commands that need it
+        guild: { id: interaction.guild_id },
+        channel: { id: interaction.channel_id },
+        guild_id: interaction.guild_id,
         user: interaction.member?.user || interaction.user,
         member: interaction.member,
         replied: false,
@@ -632,8 +376,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
         }
       };
       
-      // Execute the command
-      await command.execute(mockInteraction, client);
+      // Execute the command (no client needed)
+      await command.execute(mockInteraction);
       
       // If no reply was sent yet, send a default acknowledgment
       if (!mockInteraction.replied && !mockInteraction.deferred) {
@@ -669,32 +413,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
     //console.log(`🔘 Received button: ${buttonId}`);
     
     try {
-      // Wait for client to be ready (with timeout)
-      if (!client.isReady()) {
-        // [HTTP] Waiting for client ready (button handler) (captured by cron)
-        //console.log('⏳ Waiting for Discord client to be ready...');
-        const ready = await Promise.race([
-          new Promise((resolve) => {
-            if (client.isReady()) return resolve(true);
-            client.once('ready', () => resolve(true));
-          }),
-          new Promise((resolve) => setTimeout(() => resolve(false), 30000)) // 30 sec timeout
-        ]);
-        
-        if (!ready) {
-          // [HTTP] Client ready timeout (button handler) (captured by cron)
-          //console.error('❌ Client not ready after 30 seconds');
-          return res.json({
-            type: InteractionResponseType.ChannelMessageWithSource,
-            data: {
-              content: '❌ Bot is still starting up, please try again in a moment.',
-              flags: MessageFlags.Ephemeral
-            }
-          });
-        }
-      }
-
-      // Create a mock interaction for button handling
+      // Create a mock interaction for button handling (no client needed)
       const mockInteraction = {
         ...interaction,
         user: interaction.member?.user || interaction.user,
@@ -750,16 +469,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
         }
       };
 
-      // Route to appropriate command handler
-      if (buttonId.startsWith('create_')) {
-        const createCommand = commands.get('create');
-        if (createCommand && createCommand.handleButton) {
-          await createCommand.handleButton(mockInteraction, client, buttonId);
-        }
-      }
       // Handle RSVP button interactions
-      else if (buttonId.startsWith('rsvp_')) {
-        const { getEvent } = require('./utils/eventManager');
+      if (buttonId.startsWith('rsvp_')) {
+        const { getEvent, addAttendee, removeAttendee } = require('./utils/eventManager');
         const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, checkAvengersAssemble } = require('./utils/achievementManager');
         
         const parts = buttonId.split('_');
@@ -774,10 +486,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
           });
         }
         
-        const guild = await client.guilds.fetch(mockInteraction.guild_id);
-        const channel = await client.channels.fetch(mockInteraction.channel_id);
         const userId = mockInteraction.user.id;
-        
         const achievements = [];
         
         if (action === 'yes') {
@@ -801,7 +510,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
             const worthyAchievements = await trackWorthyEvent(event.creatorId);
             if (worthyAchievements.length > 0) {
               const worthyText = worthyAchievements.map(a => `<@${event.creatorId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-              channel.send(worthyText).catch(() => {});
+              // Send via REST API
+              await fetch(`https://discord.com/api/v10/channels/${mockInteraction.channel_id}/messages`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+                },
+                body: JSON.stringify({ content: worthyText })
+              }).catch(() => {});
             }
           }
           
@@ -812,7 +529,15 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
               const avengersText = avengersAchievements.map(({ userId, achievements }) => 
                 achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n')
               ).join('\n');
-              channel.send(avengersText).catch(() => {});
+              // Send via REST API
+              await fetch(`https://discord.com/api/v10/channels/${mockInteraction.channel_id}/messages`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+                },
+                body: JSON.stringify({ content: avengersText })
+              }).catch(() => {});
             }
           }
           
@@ -854,10 +579,17 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
           });
         }
         
-        // Send achievement notifications
+        // Send achievement notifications via REST API
         if (achievements.length > 0) {
           const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-          channel.send(achievementText).catch(() => {});
+          await fetch(`https://discord.com/api/v10/channels/${mockInteraction.channel_id}/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bot ${process.env.DISCORD_TOKEN}`
+            },
+            body: JSON.stringify({ content: achievementText })
+          }).catch(() => {});
         }
       }
       // Add more button handlers here for other commands
@@ -943,7 +675,7 @@ checkSleepSchedule();
 setInterval(checkSleepSchedule, 5 * 60 * 1000);
 
 // ========================================
-// Auto-Cleanup for Old Events
+// Auto-Cleanup for Old Events (Gateway-Free)
 // ========================================
 async function cleanupOldEvents() {
   const now = DateTime.now().setZone('America/Los_Angeles');
@@ -958,20 +690,12 @@ async function cleanupOldEvents() {
       let eventTime;
       
       if (event.type === 'planned') {
-        // ✅ FIX: Use stored ISO timestamps (reliable) instead of re-parsing relative strings
+        // ✅ Use stored ISO timestamps (reliable)
         if (event.eventTimeIso) {
-          // Primary: Use the stored absolute event time
           eventTime = DateTime.fromISO(event.eventTimeIso, { zone: 'America/Los_Angeles' });
         } else if (event.reminderTime) {
-          // Fallback: Calculate from reminderTime (45 mins before event)
           const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
-          eventTime = reminderTime.plus({ minutes: 45 });
-        } else if (event.time) {
-          // Last resort: parse the string (may be unreliable on restart)
-          const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
-          if (parsed && parsed.length > 0) {
-            eventTime = DateTime.fromJSDate(parsed[0].start.date()).setZone('America/Los_Angeles');
-          }
+          eventTime = reminderTime.plus({ minutes: 25 });
         }
       } else if (event.type === 'now') {
         // Use creation time for "now" events
@@ -983,28 +707,10 @@ async function cleanupOldEvents() {
         const eventEndTime = eventTime.plus({ minutes: 30 });
         
         if (eventEndTime <= now) {
-          // [CLEANUP] Auto-cleaning old event
-          //console.log(`🧹 Auto-cleaning old event #${eventId} (${event.type})`);
-          
           // Process non-responders BEFORE deleting
-          const nonResponderAchievements = await processEventNonResponders(event);
-          
-          // Log if any achievements were awarded
-          if (nonResponderAchievements.length > 0) {
-            // [CLEANUP] Achievement tracking
-            //console.log(`👻 Cloak's Shadow progress tracked for ${nonResponderAchievements.length} non-responder(s) on event #${eventId}`);
-            
-            // Send achievement notifications if bot is ready
-            nonResponderAchievements.forEach(({ userId, achievements }) => {
-              achievements.forEach(achievement => {
-                // [CLEANUP] Achievement unlocked
-                //console.log(`  ✨ User ${userId} unlocked ${achievement.emoji} ${achievement.name}!`);
-              });
-            });
-          }
+          await processEventNonResponders(event);
           
           // Clean up the event
-          cancelReminder(eventId);
           await clearEventCredits(eventId);
           deleteEvent(eventId);
           cleanedCount++;
@@ -1014,8 +720,7 @@ async function cleanupOldEvents() {
   }
   
   if (cleanedCount > 0) {
-    // [CLEANUP] Cleanup summary
-    //console.log(`✅ Cleaned up ${cleanedCount} old event(s)`);
+    console.log(`✅ Cleaned up ${cleanedCount} old event(s)`);
   }
 }
 
@@ -1023,91 +728,3 @@ async function cleanupOldEvents() {
 setInterval(() => {
   cleanupOldEvents().catch(() => {});
 }, 5 * 60 * 1000);
-
-// ========================================
-// Recreate Reminders on Startup
-// ========================================
-function recreateReminders() {
-  const now = DateTime.now().setZone('America/Los_Angeles');
-  const events = getAllEvents();
-  let recreatedCount = 0;
-  
-  for (const eventId in events) {
-    const event = events[eventId];
-    
-    // If event has a reminderTime but no active timeout, recreate it
-    if (event.reminderTime && !event.reminderTimeoutId && event.channelId) {
-      try {
-        const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
-        const delayMs = reminderTime.diff(now).milliseconds;
-        
-        // Only recreate if reminder is in the future
-        if (delayMs > 0) {
-          const channel = client.channels.cache.get(event.channelId);
-          if (!channel) {
-            // [CLEANUP] Channel not found warning
-            //console.warn(`⚠️ Channel ${event.channelId} not found for event #${eventId}`);
-            continue;
-          }
-          
-          // Schedule the reminder
-          const timeoutId = setTimeout(async () => {
-            const event = getAllEvents()[eventId];
-            if (!event) return;
-            
-            const attendeeMentions = event.attendees.map(id => `<@${id}>`).join(' ');
-            await channel.send({
-              content: `⏰ Time to play! ${attendeeMentions || 'Everyone'}`,
-              allowedMentions: { parse: ['users'] }
-            });
-          }, delayMs);
-          
-          setReminder(eventId, timeoutId, event.channelId, event.messageId);
-          recreatedCount++;
-          
-          const minsUntil = Math.round(delayMs / 60000);
-          // [CLEANUP] Reminder recreated
-          console.log(`⏰ Recreated reminder for event #${eventId} (fires in ${minsUntil} minutes)`);
-        } else {
-          // [CLEANUP] Expired reminder skipped
-          console.log(`⏭️  Skipped expired reminder for event #${eventId}`);
-        }
-      } catch (err) {
-        // [CLEANUP] Error recreating reminder
-        //console.error(`❌ Error recreating reminder for event #${eventId}:`, err);
-      }
-    }
-  }
-  
-  if (recreatedCount > 0) {
-    // [CLEANUP] Reminders recreated summary
-    //console.log(`✅ Recreated ${recreatedCount} reminder(s) from saved data`);
-  }
-}
-
-// Handle messages for multi-step commands (like /create time input)
-client.on('messageCreate', async (message) => {
-  // Ignore bot messages
-  if (message.author.bot) return;
-
-  try {
-    // Check if /create command is waiting for time input
-    const createCommand = commands.get('create');
-    if (createCommand && createCommand.handleTimeMessage) {
-      const handled = await createCommand.handleTimeMessage(message, client);
-      if (handled) return;
-    }
-
-    // Check if /reschedule command is waiting for time input
-    const rescheduleCommand = commands.get('reschedule');
-    if (rescheduleCommand && rescheduleCommand.handleTimeMessage) {
-      const handled = await rescheduleCommand.handleTimeMessage(message, client);
-      if (handled) return;
-    }
-
-    // Add more command message handlers here as needed
-  } catch (error) {
-    // [MESSAGE_HANDLER] Error handling message
-    //console.error('❌ Error handling message for command:', error);
-  }
-});
