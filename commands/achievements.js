@@ -16,15 +16,22 @@ module.exports = {
     let targetUser = interaction.user;
     
     if (userOption) {
-      // Always fetch from client to get a proper User object with methods
-      if (interaction.client && userOption.id) {
+      // getUser() returns resolved user data (plain object with username/avatar) or { id: ... }
+      // If it already has username/avatar, use it directly (no need to fetch)
+      // Otherwise, try to fetch from client if available
+      if (userOption.username || userOption.avatar) {
+        // Already has complete user data from Discord's resolved data
+        targetUser = userOption;
+      } else if (interaction.client && userOption.id) {
+        // Only has ID, try to fetch full User object
         try {
           targetUser = await interaction.client.users.fetch(userOption.id);
         } catch (error) {
-          // If fetch fails, use the option or fallback to interaction.user
-          targetUser = userOption.id ? userOption : interaction.user;
+          // Fetch failed, use what we have
+          targetUser = userOption;
         }
       } else {
+        // No client available, use what we have
         targetUser = userOption;
       }
     }

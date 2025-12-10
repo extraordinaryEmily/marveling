@@ -211,12 +211,9 @@ const client = new Client({
 client.commands = commands;
 
 // Login to Discord (for API access)
-client.login(process.env.DISCORD_TOKEN).then(() => {
-  // [STARTUP] Discord client ready
-  //console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
-}).catch(err => {
+client.login(process.env.DISCORD_TOKEN).catch(err => {
   // [STARTUP] Discord login failed
-  //console.error('❌ Failed to login to Discord:', err);
+  console.error('❌ Failed to login to Discord:', err);
 });
 
 // ========================================
@@ -815,17 +812,23 @@ client.on('messageCreate', async (message) => {
 client.once('ready', async () => {
   console.log(`🎉 Discord client ready as ${client.user.tag}`);
   
-  // [STARTUP] Auto-cleanup service started
-  //console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
-  // [STARTUP] Message listener active
-  //console.log('📨 Message listener active for multi-step commands');
-  
-  // Run cleanup immediately on startup
-  cleanupOldEvents().catch(() => {});
-  
-  // Clean up orphaned reminders in Supabase (reminders for deleted events)
-  await cleanupOrphanedReminders();
-  
-  // Recreate any reminders from saved events
-  recreateReminders();
+  // Wrap async startup code in try-catch to prevent errors from blocking
+  try {
+    // [STARTUP] Auto-cleanup service started
+    //console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
+    // [STARTUP] Message listener active
+    //console.log('📨 Message listener active for multi-step commands');
+    
+    // Run cleanup immediately on startup
+    cleanupOldEvents().catch(() => {});
+    
+    // Clean up orphaned reminders in Supabase (reminders for deleted events)
+    await cleanupOrphanedReminders();
+    
+    // Recreate any reminders from saved events
+    recreateReminders();
+  } catch (error) {
+    // Log but don't block - bot is still ready
+    console.error('❌ Error in startup services:', error);
+  }
 });
