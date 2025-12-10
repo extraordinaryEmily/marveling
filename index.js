@@ -215,6 +215,8 @@ console.log('🔧 Setting up ready event listener...');
 client.once('ready', () => {
   // Log immediately - don't wait for async code
   console.log(`🎉 Discord client ready as ${client.user.tag}`);
+  console.log(`🎉 Bot ID: ${client.user.id}`);
+  console.log(`🎉 Bot username: ${client.user.username}`);
   
   // Run async startup code in background (don't await)
   (async () => {
@@ -239,16 +241,32 @@ client.once('ready', () => {
   })();
 });
 
+// Also listen for ready with 'on' to catch if 'once' doesn't work
+client.on('ready', () => {
+  console.log('🟢 Ready event fired (on listener)');
+});
+
 // Login to Discord (for API access)
 console.log('🔐 Attempting to login to Discord...');
 console.log('🔑 Token exists:', !!process.env.DISCORD_TOKEN);
 console.log('🔑 Token length:', process.env.DISCORD_TOKEN?.length || 0);
 
+// Set a timeout to detect if login hangs
+const loginTimeout = setTimeout(() => {
+  console.log('⏰ Login timeout - checking client state...');
+  console.log('⏰ Client ready?', client.isReady());
+  console.log('⏰ Client user?', client.user?.tag || 'null');
+}, 10000); // 10 second timeout
+
 client.login(process.env.DISCORD_TOKEN)
   .then(() => {
+    clearTimeout(loginTimeout);
     console.log('✅ Login promise resolved');
+    console.log('✅ Client ready state:', client.isReady());
+    console.log('✅ Client user:', client.user?.tag || 'null');
   })
   .catch(err => {
+    clearTimeout(loginTimeout);
     // [STARTUP] Discord login failed
     console.error('❌ Failed to login to Discord:', err);
     console.error('❌ Error details:', err.message);
