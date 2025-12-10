@@ -16,6 +16,8 @@ const { DateTime } = require('luxon');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+console.log("🔵 Startup: file loaded");
+
 // Track last request time (for idle logging)
 let lastRequestTime = Date.now();
 
@@ -207,7 +209,7 @@ const client = new Client({
 });
 
 client.commands = commands;
-
+console.log("🟢 Reached client.login()");
 // Login to Discord (for API access)
 client.login(process.env.DISCORD_TOKEN).then(() => {
   // [STARTUP] Discord client ready
@@ -216,6 +218,7 @@ client.login(process.env.DISCORD_TOKEN).then(() => {
   // [STARTUP] Discord login failed
   console.error('❌ Failed to login to Discord:', err);
 });
+console.log("🟣 client.login() called");
 
 // ========================================
 // Discord Interactions Endpoint (HTTP)
