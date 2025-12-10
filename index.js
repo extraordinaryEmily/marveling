@@ -241,9 +241,35 @@ client.once('ready', () => {
 
 // Login to Discord (for API access)
 console.log('🔐 Attempting to login to Discord...');
-client.login(process.env.DISCORD_TOKEN).catch(err => {
-  // [STARTUP] Discord login failed
-  console.error('❌ Failed to login to Discord:', err);
+console.log('🔑 Token exists:', !!process.env.DISCORD_TOKEN);
+console.log('🔑 Token length:', process.env.DISCORD_TOKEN?.length || 0);
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => {
+    console.log('✅ Login promise resolved');
+  })
+  .catch(err => {
+    // [STARTUP] Discord login failed
+    console.error('❌ Failed to login to Discord:', err);
+    console.error('❌ Error details:', err.message);
+    console.error('❌ Stack:', err.stack);
+  });
+
+// Also listen for error events
+client.on('error', (error) => {
+  console.error('❌ Discord client error:', error);
+});
+
+client.on('warn', (warning) => {
+  console.warn('⚠️ Discord client warning:', warning);
+});
+
+client.on('disconnect', () => {
+  console.log('🔌 Discord client disconnected');
+});
+
+client.on('reconnecting', () => {
+  console.log('🔄 Discord client reconnecting...');
 });
 
 // ========================================
