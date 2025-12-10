@@ -10,6 +10,66 @@ const { getPendingReminders, markReminderSent, cleanupOrphanedReminders } = requ
 const chrono = require('chrono-node');
 const { DateTime } = require('luxon');
 
+// Test WebSocket connectivity to Discord Gateway
+console.log('🔌 Testing WebSocket connectivity to Discord Gateway...');
+try {
+  let WebSocket;
+  try {
+    WebSocket = require('ws');
+    console.log('✅ WebSocket module loaded');
+  } catch (wsError) {
+    console.log('⚠️ ws module not found, trying to use from discord.js...');
+    // Try to get ws from discord.js dependencies
+    try {
+      const discordJsPath = require.resolve('discord.js');
+      const discordJsDir = require('path').dirname(discordJsPath);
+      WebSocket = require(require('path').join(discordJsDir, '../ws'));
+    } catch (e) {
+      console.error('❌ Could not load WebSocket module:', e.message);
+      WebSocket = null;
+    }
+  }
+  
+  if (WebSocket) {
+    console.log('🔌 Creating WebSocket connection to Discord Gateway...');
+    const ws = new WebSocket('wss://gateway.discord.gg/?v=10&encoding=json');
+    
+    ws.on('open', () => {
+      console.log('✅ WebSocket OPENED - Network connectivity OK');
+      ws.close();
+    });
+    
+    ws.on('message', (msg) => {
+      const msgStr = msg.toString();
+      console.log('📨 WS MESSAGE (first 200 chars):', msgStr.substring(0, 200));
+    });
+    
+    ws.on('error', (err) => {
+      console.error('❌ WS ERROR:', err.message);
+      console.error('❌ WS ERROR CODE:', err.code);
+      console.error('❌ WS ERROR TYPE:', err.type);
+    });
+    
+    ws.on('close', (code, reason) => {
+      console.log(`🔌 WebSocket CLOSED - Code: ${code}, Reason: ${reason ? reason.toString() : 'none'}`);
+    });
+    
+    // Timeout after 5 seconds
+    setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) {
+        console.log('⏰ WebSocket test timeout (5s) - connection still pending');
+        console.log('⏰ WebSocket readyState:', ws.readyState);
+        ws.close();
+      }
+    }, 5000);
+  } else {
+    console.log('⚠️ Skipping WebSocket test - module not available');
+  }
+} catch (error) {
+  console.error('❌ Failed to test WebSocket:', error.message);
+  console.error('❌ Error stack:', error.stack);
+}
+
 // ========================================
 // Express Server (HTTP Interactions Endpoint)
 // ========================================
@@ -212,15 +272,23 @@ client.commands = commands;
 
 // Set up ready event listener BEFORE login (critical!)
 console.log('🔧 Setting up ready event listener...');
+console.log('🔧 Event listeners before setup:', client.listenerCount('ready'));
+
 client.once('ready', () => {
+  console.log('🟢 ONCE READY HANDLER FIRED!');
   // Log immediately - don't wait for async code
   console.log(`🎉 Discord client ready as ${client.user.tag}`);
   console.log(`🎉 Bot ID: ${client.user.id}`);
   console.log(`🎉 Bot username: ${client.user.username}`);
+  console.log(`🎉 Bot discriminator: ${client.user.discriminator}`);
+  console.log(`🎉 Client uptime: ${client.uptime}ms`);
+  console.log(`🎉 WS status: ${client.ws?.status}`);
+  console.log(`🎉 WS ping: ${client.ws?.ping}ms`);
   
   // Run async startup code in background (don't await)
   (async () => {
     try {
+      console.log('🚀 Starting async startup services...');
       // [STARTUP] Auto-cleanup service started
       //console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
       // [STARTUP] Message listener active
@@ -234,61 +302,120 @@ client.once('ready', () => {
       
       // Recreate any reminders from saved events
       recreateReminders();
+      console.log('✅ Async startup services completed');
     } catch (error) {
       // Log but don't block - bot is still ready
       console.error('❌ Error in startup services:', error);
+      console.error('❌ Error stack:', error.stack);
     }
   })();
 });
 
 // Also listen for ready with 'on' to catch if 'once' doesn't work
 client.on('ready', () => {
+  console.log('🟢 ON READY HANDLER FIRED!');
   console.log('🟢 Ready event fired (on listener)');
+  console.log('🟢 Client user:', client.user?.tag || 'null');
 });
+
+console.log('✅ Ready listeners set up. Count:', client.listenerCount('ready'));
 
 // Login to Discord (for API access)
 console.log('🔐 Attempting to login to Discord...');
 console.log('🔑 Token exists:', !!process.env.DISCORD_TOKEN);
 console.log('🔑 Token length:', process.env.DISCORD_TOKEN?.length || 0);
+console.log('🔑 Token preview:', process.env.DISCORD_TOKEN?.substring(0, 10) + '...' || 'null');
+console.log('🔑 Node version:', process.version);
+console.log('🔑 Platform:', process.platform);
+console.log('🔑 Arch:', process.arch);
+
+// Log client state before login
+console.log('📊 Pre-login client state:', {
+  isReady: client.isReady(),
+  user: client.user?.tag || 'null',
+  wsStatus: client.ws?.status || 'null',
+  listenerCount: client.listenerCount('ready')
+});
 
 // Set a timeout to detect if login hangs
 const loginTimeout = setTimeout(() => {
-  console.log('⏰ Login timeout - checking client state...');
+  console.log('⏰ Login timeout (10s) - checking client state...');
   console.log('⏰ Client ready?', client.isReady());
   console.log('⏰ Client user?', client.user?.tag || 'null');
+  console.log('⏰ WS status?', client.ws?.status || 'null');
+  console.log('⏰ WS ping?', client.ws?.ping || 'null');
+  console.log('⏰ Ready listeners?', client.listenerCount('ready'));
 }, 10000); // 10 second timeout
 
-client.login(process.env.DISCORD_TOKEN)
+console.log('🚀 Calling client.login()...');
+const loginPromise = client.login(process.env.DISCORD_TOKEN);
+
+console.log('📝 Login promise created, waiting for resolution...');
+
+loginPromise
   .then(() => {
     clearTimeout(loginTimeout);
-    console.log('✅ Login promise resolved');
+    console.log('✅ Login promise RESOLVED');
     console.log('✅ Client ready state:', client.isReady());
     console.log('✅ Client user:', client.user?.tag || 'null');
+    console.log('✅ WS status:', client.ws?.status || 'null');
+    console.log('✅ WS ping:', client.ws?.ping || 'null');
   })
   .catch(err => {
     clearTimeout(loginTimeout);
     // [STARTUP] Discord login failed
+    console.error('❌ Login promise REJECTED');
     console.error('❌ Failed to login to Discord:', err);
-    console.error('❌ Error details:', err.message);
-    console.error('❌ Stack:', err.stack);
+    console.error('❌ Error name:', err.name);
+    console.error('❌ Error message:', err.message);
+    console.error('❌ Error code:', err.code);
+    console.error('❌ Error stack:', err.stack);
   });
 
 // Also listen for error events
 client.on('error', (error) => {
-  console.error('❌ Discord client error:', error);
+  console.error('❌ Discord client ERROR event:', error);
+  console.error('❌ Error name:', error.name);
+  console.error('❌ Error message:', error.message);
+  console.error('❌ Error stack:', error.stack);
 });
 
 client.on('warn', (warning) => {
-  console.warn('⚠️ Discord client warning:', warning);
+  console.warn('⚠️ Discord client WARN event:', warning);
 });
 
-client.on('disconnect', () => {
-  console.log('🔌 Discord client disconnected');
+client.on('disconnect', (event) => {
+  console.log('🔌 Discord client DISCONNECT event');
+  console.log('🔌 Close code:', event.code);
+  console.log('🔌 Close reason:', event.reason);
 });
 
 client.on('reconnecting', () => {
-  console.log('🔄 Discord client reconnecting...');
+  console.log('🔄 Discord client RECONNECTING event');
 });
+
+client.on('shardReady', (id) => {
+  console.log(`🟢 Shard READY event - Shard ID: ${id}`);
+});
+
+client.on('shardError', (error, id) => {
+  console.error(`❌ Shard ERROR event - Shard ID: ${id}`, error);
+});
+
+client.on('shardDisconnect', (event, id) => {
+  console.log(`🔌 Shard DISCONNECT event - Shard ID: ${id}`, event.code);
+});
+
+client.on('shardReconnecting', (id) => {
+  console.log(`🔄 Shard RECONNECTING event - Shard ID: ${id}`);
+});
+
+// Log when WebSocket opens
+if (client.ws) {
+  console.log('📡 WebSocket manager exists');
+} else {
+  console.log('⚠️ WebSocket manager does not exist yet');
+}
 
 // ========================================
 // Discord Interactions Endpoint (HTTP)
