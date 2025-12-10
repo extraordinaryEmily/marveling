@@ -210,20 +210,14 @@ const client = new Client({
 
 client.commands = commands;
 
-// LISTEN FOR READY *BEFORE* LOGIN
-client.once("ready", () => {
-  console.log(`🎉 Discord client ready as ${client.user.tag}`);
+// Login to Discord (for API access)
+client.login(process.env.DISCORD_TOKEN).then(() => {
+  // [STARTUP] Discord client ready
+  //console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
+}).catch(err => {
+  // [STARTUP] Discord login failed
+  //console.error('❌ Failed to login to Discord:', err);
 });
-
-console.log("🟢 Reached client.login()");
-console.log("TOKEN EXISTS?", !!process.env.DISCORD_TOKEN);
-console.log("TOKEN LENGTH:", process.env.DISCORD_TOKEN?.length);
-client.login(process.env.DISCORD_TOKEN)
-  .catch(err => {
-    console.error("❌ Failed to login:", err);
-  });
-
-console.log("🟣 client.login() called");
 
 // ========================================
 // Discord Interactions Endpoint (HTTP)
@@ -818,7 +812,9 @@ client.on('messageCreate', async (message) => {
 });
 
 // Start services after bot is ready
-client.once('clientReady', async () => {
+client.once('ready', async () => {
+  console.log(`🎉 Discord client ready as ${client.user.tag}`);
+  
   // [STARTUP] Auto-cleanup service started
   //console.log('🧹 Auto-cleanup service started (runs every 5 minutes)');
   // [STARTUP] Message listener active
