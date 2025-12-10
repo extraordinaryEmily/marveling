@@ -209,15 +209,19 @@ const client = new Client({
 });
 
 client.commands = commands;
-console.log("🟢 Reached client.login()");
-// Login to Discord (for API access)
-client.login(process.env.DISCORD_TOKEN).then(() => {
-  // [STARTUP] Discord client ready
-  console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
-}).catch(err => {
-  // [STARTUP] Discord login failed
-  console.error('❌ Failed to login to Discord:', err);
+
+// LISTEN FOR READY *BEFORE* LOGIN
+client.once("ready", () => {
+  console.log(`🎉 Discord client ready as ${client.user.tag}`);
 });
+
+console.log("🟢 Reached client.login()");
+
+client.login(process.env.DISCORD_TOKEN)
+  .catch(err => {
+    console.error("❌ Failed to login:", err);
+  });
+
 console.log("🟣 client.login() called");
 
 // ========================================
