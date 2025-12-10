@@ -1,4 +1,11 @@
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags
+} = require('discord.js');
 const {
   getEvent,
   deleteEvent,
@@ -6,7 +13,7 @@ const {
   addInvited,
   cancelReminder
 } = require('../utils/eventManager');
-const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder, setupRSVPCollector } = require('../utils/helper');
+const { isValidDateTime, validateAndAdjustEventTime, scheduleReminder } = require('../utils/helper');
 const { clearEventCredits, processEventNonResponders, trackReschedule } = require('../utils/achievementManager');
 const { registerCommandState, completeUserCommand } = require('../utils/commandStateManager');
 const { cancelReminder: cancelSupabaseReminder } = require('../utils/supabaseClient');
@@ -19,10 +26,16 @@ module.exports = {
       option.setName('id')
         .setDescription('Event ID to reschedule (e.g. 1001)')
         .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('time')
+        .setDescription('New date/time (e.g., "Friday 8PM") - All times are PST')
+        .setRequired(true)
     ),
 
   async execute(interaction) {
     const eventId = interaction.options.getString('id').replace('#', '');
+    const newTime = interaction.options.getString('time').trim();
     const event = getEvent(eventId);
 
     // Validate event exists
@@ -49,158 +62,123 @@ module.exports = {
       });
     }
 
-    // Prompt for new time
-    await interaction.reply({
-      content: '🗓 What\'s the new time?\n💡 Type your answer in the channel (e.g., "Friday 8PM" or "Oct 18 5PM")\n💡 All times are PST\n💡 Type "cancel" to abort',
-      flags: MessageFlags.Ephemeral
-    });
-
-    // Store state to wait for message
-    registerCommandState(interaction.user.id, 'reschedule', {
-      step: 'awaiting_time',
-      eventId: eventId,
-      guildId: interaction.guild.id,
-      channelId: interaction.channel.id,
-      timestamp: Date.now()
-    });
-  },
-
-  // Handle the time message (called from index.js message event)
-  async handleTimeMessage(message, client) {
-    const { getUserCommandState } = require('../utils/commandStateManager');
-    const commandState = getUserCommandState(message.author.id);
-    
-    if (!commandState || commandState.commandName !== 'reschedule' || !commandState.collectors) {
-      return false; // Not handling this message
-    }
-
-    const state = commandState.collectors; // Our state data is stored in collectors param
-    
-    if (state.step !== 'awaiting_time') {
-      return false; // Not waiting for time input
-    }
-
-    // Check if message is in the right channel
-    if (message.channel.id !== state.channelId) {
-      return false;
-    }
-
-    // Timeout after 60 seconds
-    if (Date.now() - state.timestamp > 60000) {
-      completeUserCommand(message.author.id);
-      await message.channel.send(`<@${message.author.id}> ⏰ Timed out. Try \`/reschedule\` again.`);
-      return true;
-    }
-
-    const input = message.content.trim();
-
-    // Handle cancellation
-    if (input.toLowerCase() === 'cancel' || input.toLowerCase() === 'no') {
-      await message.delete().catch(() => {});
-      await message.channel.send(`<@${message.author.id}> 🛑 Reschedule cancelled.`);
-      completeUserCommand(message.author.id);
-      return true;
-    }
-
     // Validate time format
-    if (!isValidDateTime(input)) {
-      await message.reply(`❌ "${input}" is not valid. Try "Oct 18 5PM" or "Friday 8PM".`);
-      return true; // We handled it, but keep waiting
+    if (!isValidDateTime(newTime)) {
+      return interaction.reply({ 
+        content: `❌ "${newTime}" is not valid. Try "Oct 18 5PM" or "Friday 8PM". All times are PST.`, 
+        flags: MessageFlags.Ephemeral 
+      });
     }
 
     // Validate and adjust time
-    const result = validateAndAdjustEventTime(input);
+    const result = validateAndAdjustEventTime(newTime);
 
     if (!result.eventTime) {
       const errorMsg = result.debugInfo.explicitToday 
         ? `❌ That time has already passed today! (All times are PST)`
         : `❌ Unable to schedule for that time. Please try a different time.`;
-      await message.reply(errorMsg);
-      return true; // We handled it, but keep waiting
+      return interaction.reply({ 
+        content: errorMsg, 
+        flags: MessageFlags.Ephemeral 
+      });
     }
 
-    // Delete the user's message
-    await message.delete().catch(() => {});
+    await interaction.deferReply();
 
-    // Get event, guild, and channel
-    const eventId = state.eventId;
-    const event = getEvent(eventId);
-    
-    if (!event) {
-      await message.channel.send(`<@${message.author.id}> ❌ Event #${eventId} was deleted.`);
-      completeUserCommand(message.author.id);
-      return true;
-    }
+    try {
+      // Fetch guild and channel
+      const guild = await interaction.client.guilds.fetch(interaction.guild.id);
+      const channel = await interaction.client.channels.fetch(interaction.channel.id);
+      const roles = await guild.roles.fetch();
+      const role = roles.find(r => r.name === 'rivaling');
+      const rolePing = role ? `<@&${role.id}>` : '@rivaling';
 
-    const guild = await client.guilds.fetch(state.guildId);
-    const channel = await client.channels.fetch(state.channelId);
-    const role = guild.roles.cache.find(r => r.name === 'rivaling');
-    const rolePing = role ? `<@&${role.id}>` : '@rivaling';
+      // Process non-responders before deleting the event
+      const nonResponderAchievements = await processEventNonResponders(event);
 
-    // Process non-responders before deleting the event
-    const nonResponderAchievements = await processEventNonResponders(event);
+      // Cancel old reminder and delete old event
+      cancelReminder(eventId);
+      cancelSupabaseReminder(eventId).catch(err => {/* Silent error */});
+      await clearEventCredits(eventId);
+      const oldInvited = [...event.invited];
+      deleteEvent(eventId);
 
-    // Cancel old reminder and delete old event
-    cancelReminder(eventId);
-    // [RESCHEDULE] Error cancelling Supabase reminder
-    cancelSupabaseReminder(eventId).catch(err => {/*console.error('Failed to cancel Supabase reminder:', err)*/});
-    await clearEventCredits(eventId);
-    const oldInvited = [...event.invited];
-    deleteEvent(eventId);
+      // Create new event
+      const newId = createEvent(interaction.user.id, 'planned', newTime);
+      oldInvited.forEach(userId => addInvited(newId, userId));
 
-    // Create new event
-    const newId = createEvent(message.author.id, 'planned', input);
-    oldInvited.forEach(userId => addInvited(newId, userId));
+      // Track reschedule and check for Eye of Agamotto achievement
+      const rescheduleAchievements = await trackReschedule(interaction.user.id, eventId, newId);
 
-    // Track reschedule and check for Eye of Agamotto achievement
-    const rescheduleAchievements = await trackReschedule(message.author.id, eventId, newId);
+      // Send new event message
+      const newEmbed = new EmbedBuilder()
+        .setColor(0x00ff88)
+        .setTitle('🔁 Marvel Rivals Game Night (Rescheduled)')
+        .addFields(
+          { name: 'Event ID', value: `#${newId}` },
+          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+        );
 
-    // Send new event message
-    const newEmbed = new EmbedBuilder()
-      .setColor(0x00ff88)
-      .setTitle('🔁 Marvel Rivals Game Night (Rescheduled)')
-      .addFields(
-        { name: 'Event ID', value: `#${newId}` },
-        { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+      // Create RSVP buttons
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`rsvp_yes_${newId}`)
+          .setLabel('Available')
+          .setEmoji('✅')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`rsvp_maybe_${newId}`)
+          .setLabel('Maybe')
+          .setEmoji('🤔')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`rsvp_no_${newId}`)
+          .setLabel("Can't make it")
+          .setEmoji('❌')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`rsvp_reschedule_${newId}`)
+          .setLabel('Reschedule')
+          .setEmoji('🔁')
+          .setStyle(ButtonStyle.Primary)
       );
 
-    const newMsg = await channel.send({
-      content: `🔁 <@${message.author.id}> **rescheduled event #${eventId}!**\n🗓 **New Time:** ${input} (PST)\n${rolePing}`,
-      embeds: [newEmbed],
-      allowedMentions: { parse: ['roles'] }
-    });
+      await channel.send({
+        content: `🔁 <@${interaction.user.id}> **rescheduled event #${eventId}!**\n🗓 **New Time:** ${newTime} (PST)\n${rolePing}`,
+        embeds: [newEmbed],
+        components: [buttons],
+        allowedMentions: { parse: ['roles'] }
+      });
 
-    // Add reactions
-    for (const e of ['✅', '🤔', '❌', '🔁']) await newMsg.react(e);
+      // Schedule new reminder
+      scheduleReminder(newId, newTime, channel, rolePing, { id: interaction.user.id });
 
-    // Set up RSVP collector (enables reaction tracking and auto-reschedule)
-    setupRSVPCollector(newMsg, { 
-      user: { id: message.author.id }, 
-      guild: guild, 
-      channel: channel 
-    }, rolePing, newId, role, 'planned', input);
+      // Send achievement notifications for non-responders
+      if (nonResponderAchievements.length > 0) {
+        for (const { userId, achievements } of nonResponderAchievements) {
+          const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+          await channel.send(achievementText).catch(() => {});
+        }
+      }
 
-    // Schedule new reminder
-    scheduleReminder(newId, input, channel, rolePing, { id: message.author.id });
-
-    // Send achievement notifications for non-responders
-    if (nonResponderAchievements.length > 0) {
-      for (const { userId, achievements } of nonResponderAchievements) {
-        const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+      // Send achievement notification for reschedule achievement
+      if (rescheduleAchievements.length > 0) {
+        const achievementText = rescheduleAchievements.map(a => 
+          `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`
+        ).join('\n');
         await channel.send(achievementText).catch(() => {});
       }
+      
+      await interaction.editReply({ 
+        content: `✅ Event #${eventId} has been rescheduled to #${newId}!`, 
+      });
+      
+    } catch (error) {
+      console.error('Error rescheduling event:', error);
+      await interaction.editReply({
+        content: '❌ Failed to reschedule event: ' + error.message
+      });
     }
-
-    // Send achievement notification for reschedule achievement
-    if (rescheduleAchievements.length > 0) {
-      const achievementText = rescheduleAchievements.map(a => 
-        `<@${message.author.id}> unlocked ${a.emoji} **${a.name}**!`
-      ).join('\n');
-      await channel.send(achievementText).catch(() => {});
-    }
-    
-    // Command completed successfully
-    completeUserCommand(message.author.id);
-    return true; // We handled this message
   }
 };
+

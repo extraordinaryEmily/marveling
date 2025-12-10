@@ -4,7 +4,7 @@ const { getEvent } = require('../utils/eventManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('guests')
-    .setDescription('See who has been invited or RSVP'd for an event')
+    .setDescription('See who has been invited or RSVP’d for an event')
     .addStringOption(option =>
       option.setName('id')
         .setDescription('Event ID to view (e.g. 1001)')
@@ -24,7 +24,7 @@ module.exports = {
       ? event.invited.map(u => `<@${u}>`).join(', ')
       : 'None';
 
-    // RSVP'd users (✅ only)
+    // RSVP’d users (✅ only)
     const rsvp = event.attendees?.length > 0
       ? event.attendees.map(u => `<@${u}>`).join(', ')
       : 'None';
@@ -44,4 +44,3 @@ module.exports = {
     await interaction.reply({ content: reply, flags: MessageFlags.Ephemeral });
   }
 };
-

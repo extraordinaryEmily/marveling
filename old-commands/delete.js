@@ -21,8 +21,8 @@ module.exports = {
       return interaction.reply({ content: `❌ Event #${id} not found.`, flags: MessageFlags.Ephemeral });
     }
 
-    // Only creator can delete (removed admin check since we can't access permissions)
-    if (interaction.user.id !== event.creatorId) {
+    // Only creator (or admin) can delete
+    if (interaction.user.id !== event.creatorId && !interaction.member.permissions.has('Administrator')) {
       return interaction.reply({ content: `🚫 You're not allowed to delete this event.`, flags: MessageFlags.Ephemeral });
     }
 
@@ -31,8 +31,8 @@ module.exports = {
     
     // Cancel any scheduled reminders
     cancelReminder(id);
-    cancelSupabaseReminder(id).catch(err => {/* Silent error */});
-    
+    // [DELETE] Error cancelling Supabase reminder
+    cancelSupabaseReminder(id).catch(err => {/*console.error('Failed to cancel Supabase reminder:', err)*/});
     // Clear achievement tracking for this event
     await clearEventCredits(id);
     deleteEvent(id);
@@ -48,4 +48,3 @@ module.exports = {
     }
   },
 };
-

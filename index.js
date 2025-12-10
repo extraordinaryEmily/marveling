@@ -757,6 +757,109 @@ app.post('/interactions', verifyKeyMiddleware(process.env.DISCORD_PUBLIC_KEY), a
           await createCommand.handleButton(mockInteraction, client, buttonId);
         }
       }
+      // Handle RSVP button interactions
+      else if (buttonId.startsWith('rsvp_')) {
+        const { getEvent } = require('./utils/eventManager');
+        const { trackRSVP, trackMaybe, trackFastRSVP, trackWorthyEvent, checkAvengersAssemble } = require('./utils/achievementManager');
+        
+        const parts = buttonId.split('_');
+        const action = parts[1]; // yes, maybe, no, reschedule
+        const eventId = parts[2];
+        
+        const event = getEvent(eventId);
+        if (!event) {
+          return mockInteraction.reply({
+            content: '❌ Event not found or has been deleted.',
+            flags: MessageFlags.Ephemeral
+          });
+        }
+        
+        const guild = await client.guilds.fetch(mockInteraction.guild_id);
+        const channel = await client.channels.fetch(mockInteraction.channel_id);
+        const userId = mockInteraction.user.id;
+        
+        const achievements = [];
+        
+        if (action === 'yes') {
+          addAttendee(eventId, userId);
+          
+          // Track RSVP achievement (only for Available) - pass eventId to prevent farming
+          const rsvpAchievements = await trackRSVP(userId, eventId);
+          achievements.push(...rsvpAchievements);
+          
+          // Check for fast RSVP (within 30 seconds, not your own event)
+          if (event && userId !== event.creatorId) {
+            const timeSinceCreation = (Date.now() - event.createdAt) / 1000; // seconds
+            if (timeSinceCreation <= 30) {
+              const bullseyeAchievements = await trackFastRSVP(userId, eventId);
+              achievements.push(...bullseyeAchievements);
+            }
+          }
+          
+          // Check for Worthy achievement (5+ RSVPs on host's event)
+          if (event && event.attendees.length >= 5) {
+            const worthyAchievements = await trackWorthyEvent(event.creatorId);
+            if (worthyAchievements.length > 0) {
+              const worthyText = worthyAchievements.map(a => `<@${event.creatorId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+              channel.send(worthyText).catch(() => {});
+            }
+          }
+          
+          // Check for Avengers Assemble achievement (everyone RSVPs)
+          if (event) {
+            const avengersAchievements = await checkAvengersAssemble(event);
+            if (avengersAchievements.length > 0) {
+              const avengersText = avengersAchievements.map(({ userId, achievements }) => 
+                achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n')
+              ).join('\n');
+              channel.send(avengersText).catch(() => {});
+            }
+          }
+          
+          await mockInteraction.reply({
+            content: `✅ You're in for event #${eventId}!`,
+            flags: MessageFlags.Ephemeral
+          });
+        } 
+        else if (action === 'maybe') {
+          // Track Maybe responses - pass eventId to prevent farming
+          const maybeAchievements = await trackMaybe(userId, eventId);
+          achievements.push(...maybeAchievements);
+          
+          await mockInteraction.reply({
+            content: `🤔 Marked as maybe for event #${eventId}`,
+            flags: MessageFlags.Ephemeral
+          });
+        }
+        else if (action === 'no') {
+          removeAttendee(eventId, userId);
+          
+          await mockInteraction.reply({
+            content: `❌ You won't be attending event #${eventId}`,
+            flags: MessageFlags.Ephemeral
+          });
+        }
+        else if (action === 'reschedule') {
+          // Only creator can reschedule
+          if (userId !== event.creatorId) {
+            return mockInteraction.reply({
+              content: '🚫 Only the event creator can reschedule.',
+              flags: MessageFlags.Ephemeral
+            });
+          }
+          
+          return mockInteraction.reply({
+            content: '🔁 To reschedule, use the `/reschedule` command with the event ID and new time.',
+            flags: MessageFlags.Ephemeral
+          });
+        }
+        
+        // Send achievement notifications
+        if (achievements.length > 0) {
+          const achievementText = achievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+          channel.send(achievementText).catch(() => {});
+        }
+      }
       // Add more button handlers here for other commands
       
       // If no handler replied, send a default response

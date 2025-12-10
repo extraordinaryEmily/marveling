@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
-const { getUserStats, getUserRanks, getLegendaryAchievements } = require('../utils/achievementManager');
+const { getUserStats, getUserRanks, getLegendaryAchievements, ACHIEVEMENT_TIERS } = require('../utils/achievementManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,17 +16,36 @@ module.exports = {
     let targetUser = interaction.user;
     
     if (userOption) {
-      targetUser = userOption;
+      // getUser() returns resolved user data (plain object with username/avatar) or { id: ... }
+      // If it already has username/avatar, use it directly (no need to fetch)
+      // Otherwise, try to fetch from client if available
+      if (userOption.username || userOption.avatar) {
+        // Already has complete user data from Discord's resolved data
+        targetUser = userOption;
+      } else if (interaction.client && userOption.id) {
+        // Only has ID, try to fetch full User object
+        try {
+          targetUser = await interaction.client.users.fetch(userOption.id);
+        } catch (error) {
+          // Fetch failed, use what we have
+          targetUser = userOption;
+        }
+      } else {
+        // No client available, use what we have
+        targetUser = userOption;
+      }
     }
     
     const stats = await getUserStats(targetUser.id);
     const ranks = await getUserRanks(targetUser.id);
 
     // Create the main embed
-    // Construct avatar URL manually (no gateway cache)
-    const avatarURL = targetUser.avatar 
-      ? `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.${targetUser.avatar.startsWith('a_') ? 'gif' : 'png'}?size=256`
-      : `https://cdn.discordapp.com/embed/avatars/${(parseInt(targetUser.id) >> 22) % 6}.png`;
+    // Handle displayAvatarURL - use method if available, otherwise construct URL
+    const avatarURL = typeof targetUser.displayAvatarURL === 'function' 
+      ? targetUser.displayAvatarURL()
+      : targetUser.avatar 
+        ? `https://cdn.discordapp.com/avatars/${targetUser.id}/${targetUser.avatar}.${targetUser.avatar?.startsWith('a_') ? 'gif' : 'png'}?size=256`
+        : `https://cdn.discordapp.com/embed/avatars/${(parseInt(targetUser.id) >> 22) % 6}.png`;
     
     const username = targetUser.username || targetUser.global_name || 'Unknown User';
     

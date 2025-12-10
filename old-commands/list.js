@@ -14,46 +14,46 @@ module.exports = {
     const now = DateTime.now().setZone('America/Los_Angeles');
 
     // Filter out past or expired events
-    const activeEventIds = eventIds.filter(id => {
-      const event = events[id];
+  const activeEventIds = eventIds.filter(id => {
+    const event = events[id];
 
-      if ((event.type === 'planned' && event.time) || event.type === 'now') {
-        let eventTime;
+    if ((event.type === 'planned' && event.time) || event.type === 'now') {
+      let eventTime;
 
-        if (event.type === 'planned') {
-          // ✅ FIX: Use stored ISO timestamps (reliable) instead of re-parsing relative strings
-          if (event.eventTimeIso) {
-            // Primary: Use the stored absolute event time
-            eventTime = DateTime.fromISO(event.eventTimeIso, { zone: 'America/Los_Angeles' });
-          } else if (event.reminderTime) {
-            // Fallback: Calculate from reminderTime (45 mins before event)
-            const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
-            eventTime = reminderTime.plus({ minutes: 45 });
-          } else if (event.time) {
-            // Last resort: parse the string (may be unreliable)
-            const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
-            if (parsed && parsed.length > 0) {
-              eventTime = DateTime.fromJSDate(parsed[0].start.date()).setZone('America/Los_Angeles');
-            }
+      if (event.type === 'planned') {
+        // ✅ FIX: Use stored ISO timestamps (reliable) instead of re-parsing relative strings
+        if (event.eventTimeIso) {
+          // Primary: Use the stored absolute event time
+          eventTime = DateTime.fromISO(event.eventTimeIso, { zone: 'America/Los_Angeles' });
+        } else if (event.reminderTime) {
+          // Fallback: Calculate from reminderTime (45 mins before event)
+          const reminderTime = DateTime.fromISO(event.reminderTime, { zone: 'America/Los_Angeles' });
+          eventTime = reminderTime.plus({ minutes: 45 });
+        } else if (event.time) {
+          // Last resort: parse the string (may be unreliable)
+          const parsed = chrono.parse(event.time, new Date(), { timezone: 'PST' });
+          if (parsed && parsed.length > 0) {
+            eventTime = DateTime.fromJSDate(parsed[0].start.date()).setZone('America/Los_Angeles');
           }
-        } else if (event.type === 'now') {
-          // Use creation time or current time for "now" events
-          eventTime = DateTime.fromJSDate(new Date(event.time || event.createdAt)).setZone('America/Los_Angeles');
         }
-
-        if (eventTime) {
-          // Consider event past if it was more than 30 minutes ago (after the event should have started)
-          const eventEndTime = eventTime.plus({ minutes: 30 });
-          return eventEndTime > now;
-        }
+      } else if (event.type === 'now') {
+        // Use creation time or current time for "now" events
+        eventTime = DateTime.fromJSDate(new Date(event.time || event.createdAt)).setZone('America/Los_Angeles');
       }
 
-      return true; // Keep event if we can't determine time
-    });
+      if (eventTime) {
+        // Consider event past if it was more than 30 minutes ago (after the event should have started)
+        const eventEndTime = eventTime.plus({ minutes: 30 });
+        return eventEndTime > now;
+      }
+    }
+
+    return true; // Keep event if we can't determine time
+  });
 
     if (activeEventIds.length === 0) {
       return interaction.reply({
-        content: '📭 No active events right now. Use `/playnow` or `/plan` to start one!',
+        content: '📭 No active events right now. Use `/create` to start one!',
         flags: MessageFlags.Ephemeral
       });
     }

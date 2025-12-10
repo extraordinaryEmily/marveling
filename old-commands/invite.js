@@ -11,7 +11,7 @@ module.exports = {
         .setDescription('Event ID (e.g. 1001)')
         .setRequired(true)
     )
-    .addUserOption(option =>
+    .addMentionableOption(option =>
       option.setName('person')
         .setDescription('Tag a server member')
         .setRequired(false)
@@ -30,7 +30,7 @@ module.exports = {
       return interaction.reply({ content: `❌ Event #${id} not found.`, flags: MessageFlags.Ephemeral });
     }
 
-    const person = interaction.options.getUser('person');
+    const person = interaction.options.getMentionable('person');
     const guest = interaction.options.getString('guest');
 
     if (person && guest) {
@@ -49,6 +49,13 @@ module.exports = {
 
     // Server member invite
     if (person) {
+      if (!person.user) {
+        return interaction.reply({ 
+          content: `⚠️ Cannot invite a role. Please tag a user.`, 
+          flags: MessageFlags.Ephemeral 
+        });
+      }
+
       if (person.id === interaction.user.id) {
         return interaction.reply({ 
           content: `⚠️ You can't invite yourself!`, 
@@ -60,9 +67,9 @@ module.exports = {
       
       // Track achievement
       const achievements = trackInviteSent(interaction.user.id, 1);
-      let replyText = `📩 Invited <@${person.id}> to event #${id}!`;
+      let replyText = `📩 Invited ${person} to event #${id}!`;
       if (achievements.length > 0) {
-        const achievementText = achievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+        const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
         replyText += `\n\n${achievementText}`;
       }
       
@@ -110,7 +117,7 @@ module.exports = {
     const achievements = trackInviteSent(interaction.user.id, guestCount);
     let replyText = `🌐 ${interaction.user.username} invited **${guest}** guest(s) to event #${id} (${newTotal}/5 total).`;
     if (achievements.length > 0) {
-      const achievementText = achievements.map(a => `<@${interaction.user.id}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+      const achievementText = achievements.map(a => `${interaction.user} unlocked ${a.emoji} **${a.name}**!`).join('\n');
       replyText += `\n\n${achievementText}`;
     }
 
@@ -122,4 +129,3 @@ module.exports = {
     });
   },
 };
-
