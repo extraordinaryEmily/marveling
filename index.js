@@ -211,10 +211,10 @@ client.commands = commands;
 // Login to Discord (for API access)
 client.login(process.env.DISCORD_TOKEN).then(() => {
   // [STARTUP] Discord client ready
-  //console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
+  console.log(`✅ Discord client ready as ${client.user?.tag || 'Bot'}`);
 }).catch(err => {
   // [STARTUP] Discord login failed
-  //console.error('❌ Failed to login to Discord:', err);
+  console.error('❌ Failed to login to Discord:', err);
 });
 
 // ========================================
