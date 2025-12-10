@@ -2,7 +2,7 @@ name: Redeploy
 
 on:
   schedule:
-    - cron: "*/20 * * * *"  # every 20 minutes
+    - cron: "* * * * *"  # every 20 minutes
 
 jobs:
   redeploy:
