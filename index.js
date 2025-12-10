@@ -216,7 +216,8 @@ client.once("ready", () => {
 });
 
 console.log("🟢 Reached client.login()");
-
+console.log("TOKEN EXISTS?", !!process.env.DISCORD_TOKEN);
+console.log("TOKEN LENGTH:", process.env.DISCORD_TOKEN?.length);
 client.login(process.env.DISCORD_TOKEN)
   .catch(err => {
     console.error("❌ Failed to login:", err);
