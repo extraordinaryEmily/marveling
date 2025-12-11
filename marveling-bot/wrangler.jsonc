@@ -1,0 +1,62 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "marveling-bot",
+	"main": "src/index.js",
+	"compatibility_date": "2025-12-10",
+	"observability": {
+		"enabled": true
+	},
+	// Optional: specify environment variables (can also use wrangler secret put)
+	"vars": {
+		"PORT": "3000",
+		"SUPABASE_URL": "https://dpuyxyipcpljrnndgdwx.supabase.co",
+		"RIVALING_ROLE_ID": "1424487231636242473"
+	  },
+	
+	  // Optional: specify cron jobs (scheduled tasks)
+	  "triggers": {
+		"crons": ["0 * * * *"] // every hour
+	  },
+	
+	  // Optional: specify Workers KV namespaces if you want to persist data there
+	  "kv_namespaces": [
+		{
+		  "binding": "MARVELING_EVENTS",
+		  "id": "c5939c54f5b14b8ab25ebf3c7a5c5721"
+		}
+	  ]
+	/**
+	 * Smart Placement
+	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
+	 */
+	// "placement": { "mode": "smart" }
+	/**
+	 * Bindings
+	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
+	 * databases, object storage, AI inference, real-time communication and more.
+	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
+	 */
+	/**
+	 * Environment Variables
+	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
+	 */
+	// "vars": { "MY_VARIABLE": "production_value" }
+	/**
+	 * Note: Use secrets to store sensitive data.
+	 * https://developers.cloudflare.com/workers/configuration/secrets/
+	 */
+	/**
+	 * Static Assets
+	 * https://developers.cloudflare.com/workers/static-assets/binding/
+	 */
+	// "assets": { "directory": "./public/", "binding": "ASSETS" }
+	/**
+	 * Service Bindings (communicate between multiple Workers)
+	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
+	 */
+	// "services": [{ "binding": "MY_SERVICE", "service": "my-service" }]
+}
