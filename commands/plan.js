@@ -16,17 +16,100 @@ const { isValidDateTime, validateAndAdjustEventTime } = require('../utils/helper
 const { scheduleReminder: scheduleSupabaseReminder } = require('../utils/supabaseClient');
 const { trackHostCreated, checkMoonKnight, checkWakandaStrategist, trackHostWithTimestamp } = require('../utils/achievementManager');
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('plan')
-    .setDescription('Plan a game night at a specific date/time')
-    .addStringOption(option =>
-      option.setName('time')
-        .setDescription('When to play (e.g., "Friday 8PM", "Oct 18 5PM") - All times are PST')
-        .setRequired(true)
-    ),
+// Cloudflare-compatible handler function
+// Returns { response, newEvent, reminderData, followUps } or { response: error }
+function handlePlanCommandCloudflare(userId, time, nextEventId, roleId, channelId, eventTimeIso, reminderTimeIso) {
+  // Validate time format (simplified - would need helper functions)
+  if (!time || time.trim().length === 0) {
+    return {
+      response: {
+        content: `❌ "${time}" doesn't look valid. Try "today 5PM", "Friday 8PM" or "10/18 5PM". All times are PST.`,
+        flags: 64 // EPHEMERAL
+      }
+    };
+  }
 
-  async execute(interaction) {
+  const rolePing = roleId ? `<@&${roleId}>` : '@rivaling';
+  const id = nextEventId;
+
+  const embed = {
+    color: 0xff0000,
+    title: '📅 Marvel Rivals Game Night',
+    fields: [
+      { name: 'Event ID', value: `#${id}` },
+      { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ⛔ Can't make it | 🔁 Reschedule" }
+    ]
+  };
+
+  const buttons = [
+    {
+      type: 1, // ACTION_ROW
+      components: [
+        {
+          type: 2, // BUTTON
+          style: 3, // SUCCESS
+          label: 'Available',
+          emoji: { name: '✅' },
+          custom_id: `rsvp_yes_${id}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 2, // SECONDARY
+          label: 'Maybe',
+          emoji: { name: '🤔' },
+          custom_id: `rsvp_maybe_${id}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 4, // DANGER
+          label: "Can't make it",
+          emoji: { name: '⛔' },
+          custom_id: `rsvp_no_${id}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 1, // PRIMARY
+          label: 'Reschedule',
+          emoji: { name: '🔁' },
+          custom_id: `rsvp_reschedule_${id}`
+        }
+      ]
+    }
+  ];
+
+  const newEvent = {
+    id,
+    creatorId: userId,
+    type: 'planned',
+    time: time,
+    invited: [userId],
+    attendees: [],
+    guests: [],
+    createdAt: Date.now(),
+    channelId: channelId,
+    eventTimeIso: eventTimeIso,
+    reminderTime: reminderTimeIso
+  };
+
+  return {
+    response: {
+      content: `${rolePing} — <@${userId}> is planning a game night!\n🗓 **Time:** ${time} (PST)\n\n✅ Event #${id} created!`,
+      embeds: [embed],
+      components: buttons
+    },
+    newEvent: newEvent,
+    reminderData: reminderTimeIso ? {
+      eventId: id,
+      reminderTime: reminderTimeIso,
+      channelId: channelId,
+      attendees: []
+    } : null,
+    followUps: [] // Would contain achievement notifications
+  };
+}
+
+// Original Discord.js handler
+async function executePlanCommand(interaction) {
     const time = interaction.options.getString('time').trim();
 
     // Validate time format
@@ -74,7 +157,7 @@ module.exports = {
         .setTitle('📅 Marvel Rivals Game Night')
         .addFields(
           { name: 'Event ID', value: `#${id}` },
-          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ⛔ Can't make it | 🔁 Reschedule" }
         );
 
       // Create RSVP buttons
@@ -92,7 +175,7 @@ module.exports = {
         new ButtonBuilder()
           .setCustomId(`rsvp_no_${id}`)
           .setLabel("Can't make it")
-          .setEmoji('❌')
+          .setEmoji('⛔')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId(`rsvp_reschedule_${id}`)
@@ -130,5 +213,17 @@ module.exports = {
       });
     }
   }
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('plan')
+    .setDescription('Plan a game night at a specific date/time')
+    .addStringOption(option =>
+      option.setName('time')
+        .setDescription('When to play (e.g., "Friday 8PM", "Oct 18 5PM") - All times are PST')
+        .setRequired(true)
+    ),
+  execute: executePlanCommand,
+  handleCloudflare: handlePlanCommandCloudflare
 };
 

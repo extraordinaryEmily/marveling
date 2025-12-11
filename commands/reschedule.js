@@ -17,22 +17,133 @@ const { isValidDateTime, validateAndAdjustEventTime } = require('../utils/helper
 const { clearEventCredits, processEventNonResponders, trackReschedule } = require('../utils/achievementManager');
 const { cancelReminder: cancelSupabaseReminder } = require('../utils/supabaseClient');
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('reschedule')
-    .setDescription('Reschedule an existing game night')
-    .addStringOption(option =>
-      option.setName('id')
-        .setDescription('Event ID to reschedule (e.g. 1001)')
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option.setName('time')
-        .setDescription('New date/time (e.g., "Friday 8PM") - All times are PST')
-        .setRequired(true)
-    ),
+// Cloudflare-compatible handler function
+// Returns { response, needsDelete, oldEventId, newEvent, reminderData, followUps } or { response: error }
+function handleRescheduleCommandCloudflare(events, eventId, userId, newTime, nextEventId, roleId, channelId, eventTimeIso, reminderTimeIso) {
+  const event = events[eventId];
 
-  async execute(interaction) {
+  if (!event) {
+    return {
+      response: {
+        content: `❌ Event #${eventId} not found.`,
+        flags: 64 // EPHEMERAL
+      }
+    };
+  }
+
+  if (event.type !== 'planned') {
+    return {
+      response: {
+        content: `❌ You cannot reschedule "Play Now" sessions.`,
+        flags: 64 // EPHEMERAL
+      }
+    };
+  }
+
+  if (userId !== event.creatorId) {
+    return {
+      response: {
+        content: `🚫 Only the host can reschedule this event.`,
+        flags: 64 // EPHEMERAL
+      }
+    };
+  }
+
+  // Validate time format (simplified)
+  if (!newTime || newTime.trim().length === 0) {
+    return {
+      response: {
+        content: `❌ "${newTime}" is not valid. Try "Oct 18 5PM" or "Friday 8PM". All times are PST.`,
+        flags: 64 // EPHEMERAL
+      }
+    };
+  }
+
+  const rolePing = roleId ? `<@&${roleId}>` : '@rivaling';
+  const newId = nextEventId;
+  const oldInvited = [...(event.invited || [])];
+
+  const embed = {
+    color: 0x00ff88,
+    title: '🔁 Marvel Rivals Game Night (Rescheduled)',
+    fields: [
+      { name: 'Event ID', value: `#${newId}` },
+      { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ⛔ Can't make it | 🔁 Reschedule" }
+    ]
+  };
+
+  const buttons = [
+    {
+      type: 1, // ACTION_ROW
+      components: [
+        {
+          type: 2, // BUTTON
+          style: 3, // SUCCESS
+          label: 'Available',
+          emoji: { name: '✅' },
+          custom_id: `rsvp_yes_${newId}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 2, // SECONDARY
+          label: 'Maybe',
+          emoji: { name: '🤔' },
+          custom_id: `rsvp_maybe_${newId}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 4, // DANGER
+          label: "Can't make it",
+          emoji: { name: '⛔' },
+          custom_id: `rsvp_no_${newId}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 1, // PRIMARY
+          label: 'Reschedule',
+          emoji: { name: '🔁' },
+          custom_id: `rsvp_reschedule_${newId}`
+        }
+      ]
+    }
+  ];
+
+  const newEvent = {
+    id: newId,
+    creatorId: userId,
+    type: 'planned',
+    time: newTime,
+    invited: oldInvited,
+    attendees: [],
+    guests: [],
+    createdAt: Date.now(),
+    channelId: channelId,
+    eventTimeIso: eventTimeIso,
+    reminderTime: reminderTimeIso
+  };
+
+  return {
+    response: {
+      content: `🔁 <@${userId}> rescheduled event #${eventId}!\n🗓 New Time: ${newTime} (PST)\n${rolePing}`,
+      embeds: [embed],
+      components: buttons,
+      allowed_mentions: { parse: ['roles'] }
+    },
+    needsDelete: true,
+    oldEventId: eventId,
+    newEvent: newEvent,
+    reminderData: reminderTimeIso ? {
+      eventId: newId,
+      reminderTime: reminderTimeIso,
+      channelId: channelId,
+      attendees: []
+    } : null,
+    followUps: [] // Would contain achievement notifications
+  };
+}
+
+// Original Discord.js handler
+async function executeRescheduleCommand(interaction) {
     const eventId = interaction.options.getString('id').replace('#', '');
     const newTime = interaction.options.getString('time').trim();
     const event = getEvent(eventId);
@@ -110,7 +221,7 @@ module.exports = {
         .setTitle('🔁 Marvel Rivals Game Night (Rescheduled)')
         .addFields(
           { name: 'Event ID', value: `#${newId}` },
-          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ❌ Can't make it | 🔁 Reschedule" }
+          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ⛔ Can't make it | 🔁 Reschedule" }
         );
 
       // Create RSVP buttons
@@ -128,7 +239,7 @@ module.exports = {
         new ButtonBuilder()
           .setCustomId(`rsvp_no_${newId}`)
           .setLabel("Can't make it")
-          .setEmoji('❌')
+          .setEmoji('⛔')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId(`rsvp_reschedule_${newId}`)
@@ -171,4 +282,21 @@ module.exports = {
       await interaction.editReply({ content: '❌ Failed to reschedule event: ' + err.message });
     }
   }
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('reschedule')
+    .setDescription('Reschedule an existing game night')
+    .addStringOption(option =>
+      option.setName('id')
+        .setDescription('Event ID to reschedule (e.g. 1001)')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('time')
+        .setDescription('New date/time (e.g., "Friday 8PM") - All times are PST')
+        .setRequired(true)
+    ),
+  execute: executeRescheduleCommand,
+  handleCloudflare: handleRescheduleCommandCloudflare
 };

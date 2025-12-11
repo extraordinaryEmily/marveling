@@ -14,12 +14,71 @@ const {
 } = require('../utils/eventManager');
 const { trackHostCreated, checkMoonKnight, trackHostWithTimestamp } = require('../utils/achievementManager');
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('playnow')
-    .setDescription('Create an immediate play session - Assemble now!'),
+// Cloudflare-compatible handler function
+// Returns { response, newEvent, followUps }
+function handlePlaynowCommandCloudflare(userId, username, roleId, nextEventId) {
+  const rolePing = roleId ? `<@&${roleId}>` : '@rivaling';
+  const id = nextEventId;
 
-  async execute(interaction) {
+  const embed = {
+    color: 0x00aeff,
+    title: '⚡ Avengers assemble!',
+    image: { url: 'https://i.imgur.com/pMPmPef.gif' },
+    fields: [
+      { name: 'Event ID', value: `#${id}` },
+      { name: 'RSVP', value: "✅ I'm coming! | ⛔ Can't make it" }
+    ]
+  };
+
+  const buttons = [
+    {
+      type: 1, // ACTION_ROW
+      components: [
+        {
+          type: 2, // BUTTON
+          style: 3, // SUCCESS
+          label: "I'm coming!",
+          emoji: { name: '✅' },
+          custom_id: `rsvp_yes_${id}`
+        },
+        {
+          type: 2, // BUTTON
+          style: 4, // DANGER
+          label: "Can't make it",
+          emoji: { name: '⛔' },
+          custom_id: `rsvp_no_${id}`
+        }
+      ]
+    }
+  ];
+
+  const newEvent = {
+    id,
+    creatorId: userId,
+    type: 'now',
+    time: Date.now(),
+    invited: [userId],
+    attendees: [],
+    guests: [],
+    createdAt: Date.now(),
+    channelId: null,
+    eventTimeIso: null,
+    reminderTime: null
+  };
+
+  return {
+    response: {
+      content: `${rolePing} — <@${userId}> needs heroes! **Assemble NOW!**`,
+      embeds: [embed],
+      components: buttons
+    },
+    newEvent: newEvent,
+    followUps: [] // Would contain achievement notifications
+  };
+}
+
+// Original Discord.js handler
+async function executePlaynowCommand(interaction) {
     await interaction.deferReply();
 
     try {
@@ -54,7 +113,7 @@ module.exports = {
         .setImage('https://i.imgur.com/pMPmPef.gif')
         .addFields(
           { name: 'Event ID', value: `#${id}` },
-          { name: 'RSVP', value: "✅ I'm coming! | ❌ Can't make it" }
+          { name: 'RSVP', value: "✅ I'm coming! | ⛔ Can't make it" }
         );
 
       // Create RSVP buttons
@@ -67,7 +126,7 @@ module.exports = {
         new ButtonBuilder()
           .setCustomId(`rsvp_no_${id}`)
           .setLabel("Can't make it")
-          .setEmoji('❌')
+          .setEmoji('⛔')
           .setStyle(ButtonStyle.Danger)
       );
 
@@ -91,5 +150,12 @@ module.exports = {
       });
     }
   }
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('playnow')
+    .setDescription('Create an immediate play session - Assemble now!'),
+  execute: executePlaynowCommand,
+  handleCloudflare: handlePlaynowCommandCloudflare
 };
 
