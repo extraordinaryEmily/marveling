@@ -22,6 +22,27 @@ const MessageFlags = {
   EPHEMERAL: 1 << 6, // 64
 };
 
+// Your bot application ID
+const CLIENT_ID = '1424457717656977410'; // replace with your Discord bot client ID
+
+async function sendFollowUp(interactionToken, content) {
+	console.log(`Sending follow-up to token: ${interactionToken}`);
+	console.log('Message content:', content);
+	try {
+	  const res = await fetch(`https://discord.com/api/v10/webhooks/${CLIENT_ID}/${interactionToken}`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ content }),
+	  });
+	  const text = await res.text();
+	  console.log('Follow-up response status:', res.status);
+	  console.log('Follow-up response body:', text);
+	  return res;
+	} catch (err) {
+	  console.error('Failed to send follow-up:', err);
+	}
+  }
+
 export default {
   async fetch(request, env, ctx) {
     return handleRequest(request, env, ctx);
@@ -38,6 +59,7 @@ export default {
 };
 
 async function handleRequest(request, env, ctx) {
+  console.log(`[${new Date().toISOString()}] Incoming request: ${request.method} ${request.url}`);
   const url = new URL(request.url);
 
   // Health check endpoint
@@ -59,11 +81,14 @@ async function handleRequest(request, env, ctx) {
   }
 
   const body = await request.text();
+  console.log('Request headers:', Object.fromEntries(request.headers.entries()));
+  console.log('Request body:', body);
   const signature = request.headers.get('X-Signature-Ed25519');
   const timestamp = request.headers.get('X-Signature-Timestamp');
 
   // Verify Discord request signature
   const isValidRequest = verifyDiscordSignature(signature, timestamp, body, PUBLIC_KEY);
+  console.log('Signature verification result:', isValidRequest);
 
   if (!isValidRequest) {
     return new Response('Invalid request signature', { status: 401 });
@@ -72,6 +97,7 @@ async function handleRequest(request, env, ctx) {
   let interaction;
   try {
     interaction = JSON.parse(body);
+	console.log('Parsed interaction:', interaction);
   } catch (err) {
     return new Response('Invalid JSON', { status: 400 });
   }
@@ -103,43 +129,25 @@ async function handleRequest(request, env, ctx) {
 
 async function handleCommand(interaction, env) {
   const commandName = interaction.data.name;
-
+  console.log(`Handling command: ${commandName} from user: ${interaction.member?.user?.id}`);
   // Simple command routing
   switch (commandName) {
     case 'help':
-      return jsonResponse({
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: {
-          content: 
-            `**🦸 Marvel Rivals Bot**\n` +
-            `Coordinate game sessions (in PST), squad up with friends, and never miss a Marvel Rivals match!\n\n` +
-            `**Commands:**\n` +
-            `\`/playnow\` - Create an immediate play session\n` +
-            `\`/plan\` - Plan a game night at a specific date/time\n` +
-            `\`/list\` - View all active events with confirmed players\n` +
-            `\`/guests\` - View the full guest list for a specific event\n` +
-            `\`/invite\` - Invite users or add outside guests\n` +
-            `\`/reschedule\` - Reschedule a planned game night\n` +
-            `\`/delete\` - Cancel and delete an event\n` +
-            `\`/achievements\` - View your rankings and achievements\n` +
-            `\`/help\` - View this help message`,
-          flags: MessageFlags.EPHEMERAL,
-        },
-      });
-
     case 'playnow':
-    case 'plan':
-    case 'list':
-    case 'guests':
-    case 'invite':
-    case 'reschedule':
-    case 'delete':
-    case 'achievements':
-      // For complex commands, defer and process asynchronously
-      // You'll need to implement the actual command logic using env bindings
-      return jsonResponse({
-        type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-      });
+	case 'plan':
+	case 'list':
+	case 'guests':
+	case 'invite':
+	case 'reschedule':
+	case 'delete':
+	case 'achievements':
+	// Send deferred response first
+	const deferResponse = jsonResponse({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
+
+	// Immediately process command asynchronously
+	processCommand(interaction, env).catch(err => console.error('Command error:', err));
+
+	return deferResponse;
 
     default:
       return jsonResponse({
@@ -151,6 +159,49 @@ async function handleCommand(interaction, env) {
       });
   }
 }
+
+async function processCommand(interaction, env) {
+	const name = interaction.data.name;
+	const userId = interaction.member?.user?.id;
+	const token = interaction.token;
+  
+	console.log(`Processing command: ${name} for user: ${userId}`);
+	let content = '';
+  
+	switch (name) { 
+	  case 'playnow':
+		content = `🎮 <@${userId}>, your immediate play session is set!`;
+		break;
+	  case 'plan':
+		content = `📅 <@${userId}>, your game night has been scheduled!`;
+		break;
+	  case 'list':
+		// Example: fetch events from Supabase
+		// const events = await env.SUPABASE.getEvents();
+		content = `📝 <@${userId}>, here are all active events:\n- Event #1001\n- Event #1002`;
+		break;
+	  case 'guests':
+		content = `👥 <@${userId}>, here’s the guest list for your event.`;
+		break;
+	  case 'invite':
+		content = `📨 <@${userId}>, invitations sent!`;
+		break;
+	  case 'reschedule':
+		content = `🔁 <@${userId}>, event has been rescheduled.`;
+		break;
+	  case 'delete':
+		content = `🗑️ <@${userId}>, event deleted.`;
+		break;
+	  case 'achievements':
+		content = `🏆 <@${userId}>, here are your achievements!`;
+		break;
+	  default:
+		content = `❌ Unknown command: ${name}`;
+	}
+  
+	// Send the follow-up message
+	await sendFollowUp(token, content);
+  }
 
 async function handleButton(interaction, env) {
   const buttonId = interaction.data.custom_id;
