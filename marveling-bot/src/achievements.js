@@ -27,6 +27,63 @@ export const ACHIEVEMENT_TIERS = {
   ]
 };
 
+export const LEGENDARY_ACHIEVEMENTS = {
+  MOON_KNIGHT: {
+    id: 'MOON_KNIGHT',
+    emoji: '🌙',
+    name: 'MOON KNIGHT',
+    description: 'Create an event between midnight-4am'
+  },
+  WAKANDA_STRATEGIST: {
+    id: 'WAKANDA_STRATEGIST',
+    emoji: '🔮',
+    name: 'WAKANDA STRATEGIST',
+    description: 'Schedule an event 20+ days in advance'
+  },
+  GOD_OF_MISCHIEF: {
+    id: 'GOD_OF_MISCHIEF',
+    emoji: '🎭',
+    name: 'GOD OF MISCHIEF',
+    description: 'Respond "Maybe" to 20 events'
+  },
+  BULLSEYE: {
+    id: 'BULLSEYE',
+    emoji: '🎯',
+    name: 'BULLSEYE',
+    description: 'RSVP within 30 seconds (not your event)'
+  },
+  AGAIN_X5: {
+    id: 'AGAIN_X5',
+    emoji: '😵‍💫',
+    name: 'AGAIN, AGAIN, AGAIN, AGAIN, AGAIN',
+    description: 'Host 5 events in 7 days'
+  },
+  WORTHY: {
+    id: 'WORTHY',
+    emoji: '⚡',
+    name: 'WORTHY',
+    description: 'Host 3 events where 5+ people RSVP'
+  },
+  CLOAKS_SHADOW: {
+    id: 'CLOAKS_SHADOW',
+    emoji: '👻',
+    name: "CLOAK'S SHADOW",
+    description: 'No response for 50 events you were invited to'
+  },
+  EYE_OF_AGAMOTTO: {
+    id: 'EYE_OF_AGAMOTTO',
+    emoji: '👁️',
+    name: 'EYE OF AGAMOTTO',
+    description: 'Reschedule the same event 5+ times'
+  },
+  AVENGERS_ASSEMBLE: {
+    id: 'AVENGERS_ASSEMBLE',
+    emoji: '🦅',
+    name: 'AVENGERS ASSEMBLE',
+    description: 'Everyone with @rivaling tag RSVPs to an event'
+  }
+};
+
 export async function trackHostCreated(supabase, userId) {
   console.log(`[ACHIEVEMENT] trackHostCreated for user ${userId}`);
   

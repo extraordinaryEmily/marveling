@@ -614,7 +614,7 @@ async function processCommand(interaction, env) {
 		  
 		  if (supabase) {
 			try {
-			  const userStats = await supabase.getUserStats(targetUserId);
+			  const userStats = await supabase.getUserStatsFromSupabase(targetUserId);
 			  console.log(`[COMMAND] Fetched stats from Supabase:`, userStats);
 			  
 			  stats = {
@@ -625,6 +625,7 @@ async function processCommand(interaction, env) {
 			  
 			  // Calculate ranks from the ACHIEVEMENT_TIERS
 			  const { ACHIEVEMENT_TIERS } = await import('./achievements.js');
+			  const { LEGENDARY_ACHIEVEMENTS } = await import('./achievements.js');
 			  
 			  const getHighestRank = (tiers, count) => {
 				let currentRank = null;
@@ -650,7 +651,13 @@ async function processCommand(interaction, env) {
 			  
 			  console.log(`[COMMAND] Calculated ranks:`, ranks);
 			  
-			  // TODO: Fetch legendary achievements
+			  // ===== Build legendary achievements directly here =====
+			  legendaryAchievements = Object.values(LEGENDARY_ACHIEVEMENTS).filter(a =>
+				Array.isArray(userStats.achievements) && userStats.achievements.includes(a.id)
+			  );
+		
+			  console.log(`[COMMAND] Legendary achievements:`, legendaryAchievements);
+
 			} catch (error) {
 			  console.error('[COMMAND] Error fetching achievements from Supabase:', error);
 			}
@@ -689,6 +696,11 @@ async function processCommand(interaction, env) {
 	}
   }
 
+
+
+
+
+  
 // Helper functions for KV operations
 async function saveEvent(env, eventId, event) {
 	console.log(`[KV] 💾 Saving event #${eventId}`, event);
