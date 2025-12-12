@@ -11,20 +11,24 @@ jobs:
     steps:
       - name: Insert fake row
         run: |
-          curl -s \
+          echo "Inserting row..."
+          RESPONSE=$(curl -v --fail \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
             -H "Content-Type: application/json" \
             -d '{"user_id":"9999999"}' \
-            $SUPABASE_URL/rest/v1/user_stats
+            "$SUPABASE_URL/rest/v1/user_stats")
+          echo "Insert Response: $RESPONSE"
 
       - name: Delete fake row
         run: |
-          curl -s \
+          echo "Deleting row..."
+          RESPONSE=$(curl -v --fail \
             -X DELETE \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "$SUPABASE_URL/rest/v1/user_stats?user_id=eq.9999999"
+            "$SUPABASE_URL/rest/v1/user_stats?user_id=eq.9999999")
+          echo "Delete Response: $RESPONSE"
 
     env:
       SUPABASE_URL: "https://dpuyxyipcpljrnndgdwx.supabase.co"
