@@ -19,8 +19,15 @@ jobs:
             -d '{"user_id":"9999999"}' \
             "$SUPABASE_URL/rest/v1/user_stats")
           echo "Insert Response: $RESPONSE"
-
-
+      - name: Delete fake row
+        run: |
+          echo "Deleting row..."
+          RESPONSE=$(curl -v --fail \
+            -X DELETE \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/user_stats?user_id=eq.9999999")
+          echo "Delete Response: $RESPONSE"
 
     env:
       SUPABASE_URL: "https://dpuyxyipcpljrnndgdwx.supabase.co"
