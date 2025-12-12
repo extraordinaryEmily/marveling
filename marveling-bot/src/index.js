@@ -1,4 +1,17 @@
 import nacl from 'tweetnacl';
+import { createSupabaseClient } from './supabase.js';
+import {
+  trackHostCreated,
+  trackInviteSent,
+  trackRSVP,
+  trackMaybe,
+  trackFastRSVP,
+  trackWorthyEvent,
+  checkAvengersAssemble,
+  checkMoonKnight,
+  checkWakandaStrategist,
+  trackHostWithTimestamp
+} from './achievements.js';
 
 // Discord public key from Developer Portal
 const PUBLIC_KEY = '45fb54cedef58867541476ba64135e875eb033978056d762991ee86b10176484';
@@ -52,14 +65,34 @@ async function sendFollowUp(applicationId, interactionToken, data) {
 
 // Helper function to get events + counter from KV
 async function getEventsState(env) {
+	console.log('[KV] 📖 Reading events from MARVELING_EVENTS');
+	console.log('[KV] 🔍 env object keys:', Object.keys(env || {}));
+	console.log('[KV] 🔍 MARVELING_EVENTS binding:', env?.MARVELING_EVENTS ? 'EXISTS ✅' : 'MISSING ❌');
+	
+	if (!env || !env.MARVELING_EVENTS) {
+	  console.error('[KV] ❌ MARVELING_EVENTS binding not found in env!');
+	  console.error('[KV] Available bindings:', Object.keys(env || {}));
+	  return { events: {}, counter: 1000 };
+	}
+	
 	try {
+	  console.log('[KV] Calling env.MARVELING_EVENTS.get("events", "json")...');
 	  const data = await env.MARVELING_EVENTS.get('events', 'json');
+	  console.log('[KV] Raw data from KV:', data);
+	  console.log('[KV] ✅ Retrieved data:', data ? `${Object.keys(data.events || {}).length} events, counter: ${data.counter}` : 'null/empty');
+	  
+	  if (!data) {
+		console.log('[KV] ⚠️ No data found, returning defaults');
+		return { events: {}, counter: 1000 };
+	  }
+	  
 	  return {
 		events: data?.events || {},
 		counter: data?.counter || 1000,
 	  };
 	} catch (err) {
-	  console.error('Error loading events from KV:', err);
+	  console.error('[KV] ❌ Error loading events from KV:', err);
+	  console.error('[KV] Error details:', err.message, err.stack);
 	  return { events: {}, counter: 1000 };
 	}
   }
@@ -115,7 +148,7 @@ export default {
   },
 };
 
-async function handleRequest(request, env, ctx) {
+  async function handleRequest(request, env, ctx) {
   console.log(`[${new Date().toISOString()}] Incoming request: ${request.method} ${request.url}`);
   const url = new URL(request.url);
 
@@ -124,6 +157,28 @@ async function handleRequest(request, env, ctx) {
     return new Response('🤖 Marveling Bot Worker is running!', {
       status: 200,
       headers: { 'Content-Type': 'text/plain' },
+    });
+  }
+  
+  // Debug endpoint to check environment
+  if (url.pathname === '/debug-env') {
+    const debugInfo = {
+      timestamp: new Date().toISOString(),
+      env_keys: Object.keys(env || {}),
+      bindings: {
+        MARVELING_EVENTS: env?.MARVELING_EVENTS ? 'BOUND ✅' : 'MISSING ❌',
+      },
+      vars: {
+        SUPABASE_URL: env?.SUPABASE_URL ? 'SET ✅' : 'MISSING ❌',
+        SUPABASE_KEY: env?.SUPABASE_KEY ? 'SET ✅' : 'MISSING ❌',
+        RIVALING_ROLE_ID: env?.RIVALING_ROLE_ID || 'MISSING ❌',
+        PORT: env?.PORT || 'MISSING ❌',
+      }
+    };
+    
+    return new Response(JSON.stringify(debugInfo, null, 2), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 
@@ -199,8 +254,11 @@ async function handleCommand(interaction, env, ctx) {
 	case 'delete':
 	case 'achievements':
 	// Send deferred response first
-	const deferResponse = jsonResponse({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE });
-
+	const deferResponse = jsonResponse({
+		type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+		data: { flags: 0 } // 👈 make deferred responses ephemeral
+	  });
+	  
 	// Process command asynchronously and ensure it completes
 	const applicationId = interaction.application_id || CLIENT_ID;
 	if (ctx) {
@@ -255,13 +313,31 @@ async function processCommand(interaction, env) {
 	const token = interaction.token;
 	const applicationId = interaction.application_id || CLIENT_ID;
 	const channelId = interaction.channel_id;
-	const roleId = env.RIVALING_ROLE_ID;
+	const roleId = env?.RIVALING_ROLE_ID;
   
-	console.log(`Processing command: ${name} for user: ${userId}`);
+	console.log(`[COMMAND] ========================================`);
+	console.log(`[COMMAND] Processing: ${name} for user: ${userId} (${username})`);
+	console.log(`[COMMAND] 🔍 Environment check:`);
+	console.log(`[COMMAND] - env object:`, env ? 'EXISTS ✅' : 'MISSING ❌');
+	console.log(`[COMMAND] - env keys:`, Object.keys(env || {}));
+	console.log(`[COMMAND] - SUPABASE_URL:`, env?.SUPABASE_URL ? 'SET ✅' : 'MISSING ❌');
+	console.log(`[COMMAND] - SUPABASE_KEY:`, env?.SUPABASE_KEY ? 'SET ✅' : 'MISSING ❌');
+	console.log(`[COMMAND] - MARVELING_EVENTS:`, env?.MARVELING_EVENTS ? 'BOUND ✅' : 'MISSING ❌');
+	console.log(`[COMMAND] - RIVALING_ROLE_ID:`, env?.RIVALING_ROLE_ID || 'MISSING ❌');
+	console.log(`[COMMAND] ========================================`);
+	
+	// Initialize Supabase client
+	const supabase = createSupabaseClient(env);
+	if (supabase) {
+		console.log('[COMMAND] ✅ Supabase client initialized');
+	} else {
+		console.log('[COMMAND] ⚠️ Supabase client not available - achievements disabled');
+	}
 	
 	try {
 	  // Get events from KV
 	  const events = await getAllEvents(env);
+	  console.log(`[COMMAND] Loaded ${Object.keys(events).length} events from KV`);
 	  
 	  // Get next event ID
 	  const eventIds = Object.keys(events);
@@ -297,11 +373,19 @@ async function processCommand(interaction, env) {
 		  const personId = personOption?.value || (interaction.data.resolved?.users?.[personOption?.value]?.id);
 		  const guestString = guestOption?.value;
 		  
+		  console.log(`[COMMAND] Invite: eventId=${eventId}, personId=${personId}, guestString=${guestString}`);
 		  result = await handleInviteCommand(events, eventId, userId, username, personId, guestString);
 		  
 		  // Save updated event if needed
 		  if (result.needsSave && result.updatedEvent) {
+			console.log(`[COMMAND] Saving updated event after invite`);
 			await saveEvent(env, eventId, result.updatedEvent);
+			
+			// Track achievement for invite
+			if (personId) {
+			  console.log(`[COMMAND] Tracking invite achievement for ${userId}`);
+			  await trackInviteSent(supabase, userId);
+			}
 		  }
 		  
 		  // Use response from result
@@ -310,11 +394,23 @@ async function processCommand(interaction, env) {
 		}
 		case 'delete': {
 		  const eventId = interaction.data.options?.find(opt => opt.name === 'id')?.value?.replace('#', '');
+		  console.log(`[COMMAND] Delete: eventId=${eventId}`);
 		  result = await handleDeleteCommand(events, eventId, userId);
 		  
 		  // Delete event if needed
 		  if (result.needsDelete) {
+			console.log(`[COMMAND] Deleting event #${result.eventId} from KV`);
 			await deleteEventFromKV(env, result.eventId);
+			
+			// Cancel reminder in Supabase
+			if (supabase) {
+			  console.log(`[COMMAND] Canceling reminder for event #${result.eventId}`);
+			  try {
+				await supabase.cancelReminder(result.eventId);
+			  } catch (error) {
+				console.error('[COMMAND] Failed to cancel reminder:', error);
+			  }
+			}
 		  }
 		  
 		  // Send follow-ups
@@ -329,11 +425,39 @@ async function processCommand(interaction, env) {
 		  break;
 		}
 		case 'playnow': {
+		  console.log(`[COMMAND] Playnow: userId=${userId}, nextEventId=${nextEventId}`);
 		  const cmdResult = handlePlaynowCommand(userId, username, roleId, nextEventId);
 		  
 		  // Save new event
 		  if (cmdResult.newEvent) {
+			console.log(`[COMMAND] Saving new playnow event #${cmdResult.newEvent.id}`);
 			await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
+			
+			// Track achievements
+			console.log(`[COMMAND] Tracking host achievements for ${userId}`);
+			const hostAchievements = await trackHostCreated(supabase, userId);
+			
+			// Check Moon Knight (midnight-4am PST)
+			const pstHour = parseInt(new Date().toLocaleString('en-US', { 
+			  timeZone: 'America/Los_Angeles', 
+			  hour: 'numeric', 
+			  hour12: false 
+			}));
+			console.log(`[COMMAND] Current PST hour: ${pstHour}`);
+			const moonKnightAchievements = await checkMoonKnight(supabase, userId, pstHour);
+			
+			// Track host timestamp
+			const timestampAchievements = await trackHostWithTimestamp(supabase, userId);
+			
+			// Combine all achievements
+			const allAchievements = [...hostAchievements, ...moonKnightAchievements, ...timestampAchievements];
+			
+			// Send achievement announcements
+			if (allAchievements.length > 0) {
+			  const achievementText = allAchievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+			  console.log(`[COMMAND] Sending achievement announcement:`, achievementText);
+			  await sendFollowUp(applicationId, token, { content: achievementText });
+			}
 		  }
 		  
 		  // Send follow-ups
@@ -351,12 +475,66 @@ async function processCommand(interaction, env) {
 		  if (!time) {
 			result = { content: '❌ Time is required.', flags: 64 };
 		  } else {
+			console.log(`[COMMAND] Plan: userId=${userId}, time=${time}, nextEventId=${nextEventId}`);
+			
+			// TODO: Parse time string to get eventTimeIso and reminderTimeIso
+			// For now, pass null and compute later
 			const cmdResult = handlePlanCommand(userId, time, nextEventId, roleId, channelId, null, null);
 			
 			// Save new event
-			if (cmdResult.newEvent) {
-			  await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
+		  if (cmdResult.newEvent) {
+			console.log(`[COMMAND] Saving new plan event #${cmdResult.newEvent.id}`);
+			await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
+			
+			// Track achievements
+			console.log(`[COMMAND] Tracking host achievements for ${userId}`);
+			const hostAchievements = await trackHostCreated(supabase, userId);
+			
+			// Check Moon Knight
+			const pstHour = parseInt(new Date().toLocaleString('en-US', { 
+			  timeZone: 'America/Los_Angeles', 
+			  hour: 'numeric', 
+			  hour12: false 
+			}));
+			const moonKnightAchievements = await checkMoonKnight(supabase, userId, pstHour);
+			
+			// Check Wakanda Strategist (3+ days in advance)
+			let strategistAchievements = [];
+			if (cmdResult.newEvent.eventTimeIso) {
+			  const eventTime = new Date(cmdResult.newEvent.eventTimeIso);
+			  const daysInAdvance = (eventTime - Date.now()) / (1000 * 60 * 60 * 24);
+			  console.log(`[COMMAND] Event planned ${daysInAdvance.toFixed(2)} days in advance`);
+			  strategistAchievements = await checkWakandaStrategist(supabase, userId, daysInAdvance);
 			}
+			
+			// Track host timestamp
+			const timestampAchievements = await trackHostWithTimestamp(supabase, userId);
+			
+			// Combine all achievements
+			const allAchievements = [...hostAchievements, ...moonKnightAchievements, ...strategistAchievements, ...timestampAchievements];
+			
+			// Send achievement announcements
+			if (allAchievements.length > 0) {
+			  const achievementText = allAchievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+			  console.log(`[COMMAND] Sending achievement announcement:`, achievementText);
+			  await sendFollowUp(applicationId, token, { content: achievementText });
+			}
+			
+			// Schedule reminder if available
+			if (cmdResult.reminderData && supabase) {
+			  console.log(`[COMMAND] Scheduling reminder for event #${nextEventId}`);
+			  try {
+				await supabase.scheduleReminder(
+				  cmdResult.reminderData.eventId,
+				  cmdResult.reminderData.reminderTime,
+				  cmdResult.reminderData.channelId,
+				  cmdResult.reminderData.attendees
+				);
+			  } catch (error) {
+				console.error('[COMMAND] Failed to schedule reminder:', error);
+			  }
+			}
+		  }
 			
 			// Send follow-ups
 			if (cmdResult.followUps && cmdResult.followUps.length > 0) {
@@ -373,14 +551,43 @@ async function processCommand(interaction, env) {
 		  const eventId = interaction.data.options?.find(opt => opt.name === 'id')?.value?.replace('#', '');
 		  const newTime = interaction.data.options?.find(opt => opt.name === 'time')?.value;
 		  
+		  console.log(`[COMMAND] Reschedule: eventId=${eventId}, newTime=${newTime}, nextEventId=${nextEventId}`);
 		  const cmdResult = handleRescheduleCommand(events, eventId, userId, newTime, nextEventId, roleId, channelId, null, null);
 		  
 		  // Delete old event and save new one
 		  if (cmdResult.needsDelete) {
+			console.log(`[COMMAND] Deleting old event #${cmdResult.oldEventId}`);
 			await deleteEventFromKV(env, cmdResult.oldEventId);
+			
+			// Cancel old reminder
+			if (supabase) {
+			  console.log(`[COMMAND] Canceling old reminder for event #${cmdResult.oldEventId}`);
+			  try {
+				await supabase.cancelReminder(cmdResult.oldEventId);
+			  } catch (error) {
+				console.error('[COMMAND] Failed to cancel old reminder:', error);
+			  }
+			}
 		  }
+		  
 		  if (cmdResult.newEvent) {
+			console.log(`[COMMAND] Saving new rescheduled event #${cmdResult.newEvent.id}`);
 			await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
+			
+			// Schedule new reminder if available
+			if (cmdResult.reminderData && supabase) {
+			  console.log(`[COMMAND] Scheduling new reminder for event #${nextEventId}`);
+			  try {
+				await supabase.scheduleReminder(
+				  cmdResult.reminderData.eventId,
+				  cmdResult.reminderData.reminderTime,
+				  cmdResult.reminderData.channelId,
+				  cmdResult.reminderData.attendees
+				);
+			  } catch (error) {
+				console.error('[COMMAND] Failed to schedule new reminder:', error);
+			  }
+			}
 		  }
 		  
 		  // Send follow-ups
@@ -398,10 +605,56 @@ async function processCommand(interaction, env) {
 		  const targetUserId = userOption?.value || userId;
 		  const targetUser = interaction.data.resolved?.users?.[targetUserId] || interaction.member?.user || interaction.user;
 		  
-		  // Simplified - would need to fetch stats from Supabase
-		  const stats = { hostsCreated: 0, invitesSent: 0, rsvpsMade: 0 };
-		  const ranks = { host: {}, recruiter: {}, responder: {} };
-		  const legendaryAchievements = [];
+		  console.log(`[COMMAND] Fetching achievements for user ${targetUserId}`);
+		  
+		  // Fetch actual stats from Supabase
+		  let stats = { hostsCreated: 0, invitesSent: 0, rsvpsMade: 0 };
+		  let ranks = { host: {}, recruiter: {}, responder: {} };
+		  let legendaryAchievements = [];
+		  
+		  if (supabase) {
+			try {
+			  const userStats = await supabase.getUserStats(targetUserId);
+			  console.log(`[COMMAND] Fetched stats from Supabase:`, userStats);
+			  
+			  stats = {
+				hostsCreated: userStats.hosts_created || 0,
+				invitesSent: userStats.invites_sent || 0,
+				rsvpsMade: userStats.rsvps_made || 0
+			  };
+			  
+			  // Calculate ranks from the ACHIEVEMENT_TIERS
+			  const { ACHIEVEMENT_TIERS } = await import('./achievements.js');
+			  
+			  const getHighestRank = (tiers, count) => {
+				let currentRank = null;
+				let nextRank = tiers[0];
+				
+				for (let i = 0; i < tiers.length; i++) {
+				  if (count >= tiers[i].count) {
+					currentRank = tiers[i];
+					nextRank = tiers[i + 1] || null;
+				  } else {
+					break;
+				  }
+				}
+				
+				return { current: currentRank, next: nextRank, progress: count };
+			  };
+			  
+			  ranks = {
+				host: getHighestRank(ACHIEVEMENT_TIERS.HOST, stats.hostsCreated),
+				recruiter: getHighestRank(ACHIEVEMENT_TIERS.RECRUITER, stats.invitesSent),
+				responder: getHighestRank(ACHIEVEMENT_TIERS.RESPONDER, stats.rsvpsMade)
+			  };
+			  
+			  console.log(`[COMMAND] Calculated ranks:`, ranks);
+			  
+			  // TODO: Fetch legendary achievements
+			} catch (error) {
+			  console.error('[COMMAND] Error fetching achievements from Supabase:', error);
+			}
+		  }
 		  
 		  const cmdResult = handleAchievementsCommand(
 			targetUserId,
@@ -438,6 +691,7 @@ async function processCommand(interaction, env) {
 
 // Helper functions for KV operations
 async function saveEvent(env, eventId, event) {
+	console.log(`[KV] 💾 Saving event #${eventId}`, event);
 	try {
 	  const { events, counter } = await getEventsState(env);
 	  events[eventId] = event;
@@ -445,38 +699,56 @@ async function saveEvent(env, eventId, event) {
 	  // Bump counter if needed
 	  const nextCounter = Math.max(counter, (parseInt(eventId, 10) || 0) + 1);
 	  
-	  await env.MARVELING_EVENTS.put('events', JSON.stringify({ events, counter: nextCounter }));
+	  const saveData = { events, counter: nextCounter };
+	  console.log(`[KV] 📝 Writing to MARVELING_EVENTS: ${Object.keys(events).length} events, counter: ${nextCounter}`);
+	  
+	  await env.MARVELING_EVENTS.put('events', JSON.stringify(saveData));
+	  console.log(`[KV] ✅ Event #${eventId} saved successfully`);
 	} catch (err) {
-	  console.error('Error saving event to KV:', err);
+	  console.error('[KV] ❌ Error saving event to KV:', err);
+	  throw err;
 	}
   }
 
 async function deleteEventFromKV(env, eventId) {
+	console.log(`[KV] 🗑️  Deleting event #${eventId}`);
 	try {
 	  const { events, counter } = await getEventsState(env);
 	  delete events[eventId];
 	  
+	  console.log(`[KV] 📝 Writing to MARVELING_EVENTS: ${Object.keys(events).length} events remaining`);
 	  await env.MARVELING_EVENTS.put('events', JSON.stringify({ events, counter }));
+	  console.log(`[KV] ✅ Event #${eventId} deleted successfully`);
 	} catch (err) {
-	  console.error('Error deleting event from KV:', err);
+	  console.error('[KV] ❌ Error deleting event from KV:', err);
+	  throw err;
 	}
   }
 
 async function handleButton(interaction, env) {
   const buttonId = interaction.data.custom_id;
   const userId = interaction.member?.user?.id || interaction.user?.id;
+  const channelId = interaction.channel_id;
+  
+  console.log(`[BUTTON] User ${userId} clicked button: ${buttonId} in channel ${channelId}`);
 
   // Handle RSVP buttons
   if (buttonId.startsWith('rsvp_')) {
     const parts = buttonId.split('_');
     const action = parts[1]; // yes, maybe, no, reschedule
     const eventId = parts[2];
+    
+    console.log(`[BUTTON] RSVP action: ${action}, eventId: ${eventId}`);
+
+    // Initialize Supabase client
+    const supabase = createSupabaseClient(env);
 
     // Load events from KV
     const { events, counter } = await getEventsState(env);
     const event = events[eventId];
 
     if (!event) {
+      console.log(`[BUTTON] ❌ Event #${eventId} not found`);
       return jsonResponse({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
@@ -492,38 +764,135 @@ async function handleButton(interaction, env) {
     event.maybe = event.maybe || [];
 
     let message = '';
+    let shouldTrackAchievements = false;
+    
     switch (action) {
       case 'yes':
         if (!event.attendees.includes(userId)) {
+          console.log(`[BUTTON] Adding ${userId} to attendees for event #${eventId}`);
           event.attendees.push(userId);
+          shouldTrackAchievements = true;
+        } else {
+          console.log(`[BUTTON] User ${userId} already in attendees`);
         }
         // Remove from maybe/ invited lists
         event.maybe = event.maybe.filter(u => u !== userId);
         event.invited = event.invited.filter(u => u !== userId);
         message = `✅ You're in for event #${eventId}!`;
+        
+		// Track achievements for RSVP
+        if (shouldTrackAchievements) {
+          console.log(`[BUTTON] Tracking RSVP achievements for ${userId}`);
+          const rsvpAchievements = await trackRSVP(supabase, userId, eventId);
+          const fastRSVPAchievements = await trackFastRSVP(supabase, userId, event.createdAt || Date.now());
+          
+          let worthyAchievements = [];
+          // Check for Worthy Event (5+ attendees)
+          if (event.attendees.length >= 5) {
+            console.log(`[BUTTON] Event #${eventId} has 5+ attendees, tracking Worthy achievement`);
+            worthyAchievements = await trackWorthyEvent(supabase, event.creatorId, event.attendees.length);
+          }
+          
+          // Check for Avengers Assemble (all invited RSVP'd)
+          const avengersAchievements = await checkAvengersAssemble(supabase, event);
+          
+          // Combine all achievements
+          const allAchievements = [...rsvpAchievements, ...fastRSVPAchievements];
+          
+          // Send personal achievements
+          if (allAchievements.length > 0) {
+            const achievementText = allAchievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+            console.log(`[BUTTON] Sending achievement announcement:`, achievementText);
+            // Send via Discord REST API
+            await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bot ${env.DISCORD_TOKEN}`
+              },
+              body: JSON.stringify({ content: achievementText })
+            }).catch(() => {});
+          }
+          
+          // Send host's Worthy achievement
+          if (worthyAchievements.length > 0 && event.creatorId !== userId) {
+            const worthyText = worthyAchievements.map(a => `<@${event.creatorId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+            await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bot ${env.DISCORD_TOKEN}`
+              },
+              body: JSON.stringify({ content: worthyText })
+            }).catch(() => {});
+          }
+          
+          // Send Avengers Assemble achievements
+          if (avengersAchievements.length > 0) {
+            for (const { userId: avengerUserId, achievements } of avengersAchievements) {
+              const avengersText = achievements.map(a => `<@${avengerUserId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+              await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bot ${env.DISCORD_TOKEN}`
+                },
+                body: JSON.stringify({ content: avengersText })
+              }).catch(() => {});
+            }
+          }
+        }
         break;
+        
       case 'maybe':
         if (!event.maybe.includes(userId)) {
+          console.log(`[BUTTON] Adding ${userId} to maybe for event #${eventId}`);
           event.maybe.push(userId);
+          shouldTrackAchievements = true;
         }
         event.attendees = event.attendees.filter(u => u !== userId);
         message = `🤔 Marked as maybe for event #${eventId}`;
+        
+        // Track maybe achievement
+        if (shouldTrackAchievements) {
+          console.log(`[BUTTON] Tracking maybe achievement for ${userId}`);
+          const maybeAchievements = await trackMaybe(supabase, userId);
+          
+          // Send achievement announcement
+          if (maybeAchievements.length > 0) {
+            const achievementText = maybeAchievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
+            await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bot ${env.DISCORD_TOKEN}`
+              },
+              body: JSON.stringify({ content: achievementText })
+            }).catch(() => {});
+          }
+        }
         break;
+        
       case 'no':
+        console.log(`[BUTTON] Removing ${userId} from event #${eventId}`);
         event.attendees = event.attendees.filter(u => u !== userId);
         event.maybe = event.maybe.filter(u => u !== userId);
         message = `⛔ You won't be attending event #${eventId}`;
         break;
+        
       case 'reschedule':
         message = `🔁 To reschedule, use the \`/reschedule\` command with the event ID and new time.`;
         break;
+        
       default:
         message = 'Unknown action';
     }
 
     // Persist updates
+    console.log(`[BUTTON] Persisting event #${eventId} updates to KV`);
     events[eventId] = event;
     await env.MARVELING_EVENTS.put('events', JSON.stringify({ events, counter }));
+    console.log(`[BUTTON] ✅ Event #${eventId} updated successfully`);
 
     return jsonResponse({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,

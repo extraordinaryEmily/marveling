@@ -1,21 +1,54 @@
 # TODO
+https://marveling-bot.marveling.workers.dev/interactions
 
-### Cron job failing when bot asleep
-**P1**  
-I think Render knows it is a "useless" wake. Though it isn't and isn't a health/ping check, it is supposed to help fire reminders. But it isn't treated that way at all. We may have to remove this cron system and instead use it to keep Supabase awake. Then use GitHub actions to redeploy this repo every single 20min or something that isn't in the sleep time.
+## Bugs, Features & Enhancements
+| ITEM | DETAILS | STATUS | PRIORITY |
+| ----------- | ----------- | ----------- | ----------- |
+| Cron for Supabase wake | Next time it sleeps, I have to pay to wake. | QE | **P1** |
+| Ephemeral mechanism | Defer messages override behavior. Code too tightly coupled | OPEN | **P1** |
+| Achievements not stored | Supabase communication is not established for `achievements` and `recent_host_timestamps`. Probably the same for some other items in the table. | OPEN | **P1** |
+| Achievements not happening | Looks like legendary achievements aren't happening | OPEN | **P2** |
+| Lost achievement notifs | Certain achievements aren't showing their notification | OPEN | **P2** |
+| Color button conflict | Red buttons' emojis are too close in color | OPEN | **P3** |
+| @rivaling invites all | /guests doesn't show everyone invited in @rivaling or tag @rivaling | OPEN | **P3** |
+|  |  | OPEN | **P1** |
+|  |  | OPEN | **P1** |
+|  |  | OPEN | **P1** |
 
-### Cron job to keep Supabase awake
-**P1**  
-Supabase goes to sleep after inactivity and I don't have anymore chances to wake it up manually I think unless I pay. So either I have to keep triggerring something in the bot on discord every other day or so OR get a cron job to keep it awake
 
-### Takes 30-60 sec to wake bot
-**P4**  
-Not much I can do at the moment, tried to make this faster but it seems to depend and change.
-
-### Achievements reset everytime bot wakes
-**P2**  
-It should work fine, maybe it was because the Supabase database was turned off because it wasn't working when I tried it the past few days. Will have to fix the cron job issue first to find out because nothing is being woken up.
-
-### /achievements broken
-**P1**  
-Getting this error " Error running command: targetUser.displayAvatarURL is not a function" when the user is empty and when user is filled
+# Checklist
+- [ ] Ephemeral mechanism ⚠️ 
+- [ ] Achievement
+    - [x] Achievement granting
+    - [ ] Achievement announcements
+    - [x] /achievements for self
+    - [x] /achievements for others
+    - [ ] Legendary achievements
+- [ ] Delete
+    - [x] Non owner deletion message
+    - [x] Delete old/current events
+    - [x] Deletion tracked & registered
+- [ ] Guests
+    - [x] RSVP is working
+    - [ ] Hide old events 
+    - [ ] Display all of @rivaling
+- [x] Help
+- [ ] Invite
+    - [x] Max 5 externals
+    - [x] Invite within server
+    - [x] Invites tracked
+    - [ ] Block old events invite
+- [ ] List
+    - [x] Hide expired Play Now events
+    - [ ] Hide expired Plan events
+    - [x] Show active stored events
+    - [x] Show RSVP
+- [ ] Create
+    - [ ] Play Now
+    - [ ] Plan
+    - [ ] Functionality
+        - [ ] Working reminders ⚠️ 
+        - [ ] Store reminders ⚠️ 
+        - [x] Store events
+        - [x] Hosting tracked
+- [ ] Reschedule **IGNORING THIS FOR NOW**

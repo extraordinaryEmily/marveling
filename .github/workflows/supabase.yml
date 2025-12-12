@@ -1,0 +1,30 @@
+name: Supabase Keepawake
+
+on:
+  schedule:
+    - cron: "0 0 */5 * *" # every 5 days
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Insert fake row
+        run: |
+          curl -s \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"user_id":"9999999"}' \
+            $SUPABASE_URL/rest/v1/user_stats
+
+      - name: Delete fake row
+        run: |
+          curl -s \
+            -X DELETE \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/user_stats?user_id=eq.9999999"
+
+    env:
+      SUPABASE_URL: "https://dpuyxyipcpljrnndgdwx.supabase.co"
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

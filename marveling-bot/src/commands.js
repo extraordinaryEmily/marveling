@@ -96,7 +96,7 @@ export async function handleInviteCommand(events, eventId, userId, username, per
     if (personId === userId) return { response: { content: `⚠️ You can't invite yourself!`, flags: 64 } };
     if (!event.invited) event.invited = [];
     if (!event.invited.includes(personId)) event.invited.push(personId);
-    return { response: { content: `📩 Invited <@${personId}> to event #${eventId}!` }, needsSave: true, updatedEvent: event };
+    return { response: { content: `📩 Invited <@${personId}> to event #${eventId}!`, flags: 0 }, needsSave: true, updatedEvent: event };
   }
   
   if (!/^\+\d+$/.test(guestString.trim())) return { response: { content: `⚠️ Invalid format. Use +1, +2, etc.`, flags: 64 } };
@@ -109,13 +109,13 @@ export async function handleInviteCommand(events, eventId, userId, username, per
   }
   if (!event.guests) event.guests = [];
   event.guests.push({ userId, username, count: guestCount });
-  return { response: { content: `🌐 ${username} invited **${guestString}** guest(s) to event #${eventId} (${newTotal}/5 total).` }, needsSave: true, updatedEvent: event };
+  return { response: { content: `🌐 ${username} invited **${guestString}** guest(s) to event #${eventId} (${newTotal}/5 total).`, flags: 0 }, needsSave: true, updatedEvent: event };
 }
 
 export async function handleDeleteCommand(events, eventId, userId) {
   const event = events[eventId];
   if (!event) return { response: { content: `❌ Event #${eventId} not found.`, flags: 64 } };
-  if (userId !== event.creatorId) return { response: { content: `🚫 You're not allowed to delete this event.`, flags: 64 } };
+  if (userId !== event.creatorId) return { response: { content: `🚫 You're not allowed to delete this event!!!`, flags: 64 } };
   return { response: { content: `🗑️ Event #${eventId} has been deleted.` }, needsDelete: true, eventId, followUps: [] };
 }
 
@@ -123,7 +123,7 @@ export function handlePlaynowCommand(userId, username, roleId, nextEventId) {
   const rolePing = roleId ? `<@&${roleId}>` : '@rivaling';
   return {
     response: {
-      content: `${rolePing} — <@${userId}> needs heroes! **Assemble NOW!**\n\n✅ Play now event #${nextEventId} created!`,
+      content: `${rolePing} — <@${userId}> needs heroes! **Assemble NOW!**`,
       embeds: [{
         color: 0x00aeff,
         title: '⚡ Avengers assemble!',
@@ -136,7 +136,8 @@ export function handlePlaynowCommand(userId, username, roleId, nextEventId) {
           { type: 2, style: 3, label: "I'm coming!", emoji: { name: '✅' }, custom_id: `rsvp_yes_${nextEventId}` },
           { type: 2, style: 4, label: "Can't make it", emoji: { name: '⛔' }, custom_id: `rsvp_no_${nextEventId}` }
         ]
-      }]
+      }],
+      flags: 0
     },
     newEvent: {
       id: nextEventId,

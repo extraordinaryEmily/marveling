@@ -132,7 +132,7 @@ async function executePlaynowCommand(interaction) {
 
       // Send via interaction response (gateway-free)
       await interaction.editReply({
-        content: `${rolePing} — <@${interaction.user.id}> needs heroes! **Assemble NOW!**\n\n✅ Play now event #${id} created!`,
+        content: `${rolePing} — <@${interaction.user.id}> needs heroes! **Assemble NOW!**`,
         embeds: [embed],
         components: [buttons]
       });

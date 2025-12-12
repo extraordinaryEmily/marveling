@@ -21,7 +21,7 @@ async function handleDeleteCommandCloudflare(events, eventId, userId) {
   if (userId !== event.creatorId) {
     return {
       response: {
-        content: `🚫 You're not allowed to delete this event.`,
+        content: `🚫 You're not allowed to delete this event!`,
         flags: 64 // EPHEMERAL
       }
     };
@@ -52,7 +52,7 @@ async function executeDeleteCommand(interaction) {
 
   // Only creator can delete (removed admin check since we can't access permissions)
   if (interaction.user.id !== event.creatorId) {
-    return interaction.reply({ content: `🚫 You're not allowed to delete this event.`, flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: `🚫 You're not allowed to delete this event!!`, flags: MessageFlags.Ephemeral });
   }
 
   // Process non-responders BEFORE deletion
