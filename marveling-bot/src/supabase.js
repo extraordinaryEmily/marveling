@@ -157,24 +157,24 @@ export class SupabaseClient {
   async updateUserStatsInSupabase(userId, stats) {
     const body = {
       user_id: userId.toString(),
-      hosts_created: stats.hostsCreated ?? 0,
-      invites_sent: stats.invitesSent ?? 0,
-      rsvps_made: stats.rsvpsMade ?? 0,
-      maybe_count: stats.maybeCount ?? 0,
-      fast_rsvps: stats.fastRSVPs ?? 0,
-      worthy_events: stats.worthyEvents ?? 0,
-      no_response_count: stats.noResponseCount ?? 0,
-      recent_host_timestamps: stats.recentHostTimestamps ?? [],
-      achievements: stats.achievements ?? []
+      hosts_created: stats.hosts_created,
+      invites_sent: stats.invites_sent,
+      rsvps_made: stats.rsvps_made,
+      maybe_count: stats.maybe_count,
+      fast_rsvps: stats.fast_rsvps,
+      worthy_events: stats.worthy_events,
+      no_response_count: stats.no_response_count,
+      recent_host_timestamps: stats.recent_host_timestamps,
+      achievements: stats.achievements
     };
-
-    try {
-      await this.query('user_stats', 'upsert', body);
-      return true;
-    } catch (e) {
-      return false;
-    }
+  
+    await this.query('user_stats', 'update', body, {
+      user_id: `eq.${userId}`
+    });
+  
+    return true;
   }
+  
 
 
   /* =========================================================================
