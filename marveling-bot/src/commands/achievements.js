@@ -13,7 +13,7 @@ export async function handleAchievementsCommand(interaction, supabase) {
     const targetUsername = targetUser.username || targetUser.global_name;
     const targetAvatar = targetUser.avatar;
   
-    console.log(`[COMMAND] Fetching achievements for user ${targetUserId}`);
+    //console.log(`[COMMAND] Fetching achievements for user ${targetUserId}`);
   
     // ===== 2. Default Values =====
     let stats = { hostsCreated: 0, invitesSent: 0, rsvpsMade: 0 };
@@ -23,7 +23,7 @@ export async function handleAchievementsCommand(interaction, supabase) {
     // ===== 3. Fetch From Supabase =====
     try {
       const userStats = await supabase.getUserStatsFromSupabase(targetUserId);
-      console.log(`[COMMAND] Fetched stats from Supabase:`, userStats);
+      //console.log(`[COMMAND] Fetched stats from Supabase:`, userStats);
   
       stats = {
         hostsCreated: userStats.hosts_created || 0,
@@ -54,13 +54,13 @@ export async function handleAchievementsCommand(interaction, supabase) {
         responder: getHighestRank(ACHIEVEMENT_TIERS.RESPONDER, stats.rsvpsMade)
       };
   
-      console.log(`[COMMAND] Calculated ranks:`, ranks);
+      //console.log(`[COMMAND] Calculated ranks:`, ranks);
   
       legendaryAchievements = Object.values(LEGENDARY_ACHIEVEMENTS).filter(
         a => Array.isArray(userStats.achievements) && userStats.achievements.includes(a.id)
       );
   
-      console.log(`[COMMAND] Legendary achievements:`, legendaryAchievements);
+      //console.log(`[COMMAND] Legendary achievements:`, legendaryAchievements);
   
     } catch (error) {
       console.error('[COMMAND] Error fetching achievements from Supabase:', error);

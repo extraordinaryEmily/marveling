@@ -14,7 +14,7 @@ export async function handleDeleteCommand(
       ?.value
       ?.replace('#', '');
   
-    console.log(`[COMMAND] Delete: eventId=${eventId}`);
+    //console.log(`[COMMAND] Delete: eventId=${eventId}`);
   
     if (!eventId) {
       return { content: '❌ Event ID is required.', flags: 64  };
@@ -31,7 +31,7 @@ export async function handleDeleteCommand(
   
     // Delete event from KV via injected function
     if (typeof deleteEventFromKV === 'function') {
-      console.log(`[COMMAND] Deleting event #${eventId} from KV`);
+      //console.log(`[COMMAND] Deleting event #${eventId} from KV`);
       try {
         await deleteEventFromKV(env, eventId);
       } catch (error) {

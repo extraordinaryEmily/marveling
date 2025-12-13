@@ -39,11 +39,11 @@ const MessageFlags = {
 const CLIENT_ID = '1424457717656977410'; // replace with your Discord bot client ID
 
 async function sendFollowUp(applicationId, interactionToken, data) {
-	console.log(`Sending follow-up to token: ${interactionToken}`);
+	// console.log(`Sending follow-up to token: ${interactionToken}`);
 	console.log('Message data:', JSON.stringify(data, null, 2));
 	try {
 	  const url = `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}`;
-	  console.log('Follow-up URL:', url);
+	  //console.log('Follow-up URL:', url);
 	  const res = await fetch(url, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -51,7 +51,8 @@ async function sendFollowUp(applicationId, interactionToken, data) {
 	  });
 	  const text = await res.text();
 	  console.log('Follow-up response status:', res.status);
-	  console.log('Follow-up response body:', text);
+	  //console.log('Follow-up response body:', text);
+    console.log('🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈🌈');
 	  if (!res.ok) {
 		console.error('Follow-up failed with status', res.status, ':', text);
 		throw new Error(`Follow-up failed: ${res.status} ${text}`);
@@ -65,9 +66,9 @@ async function sendFollowUp(applicationId, interactionToken, data) {
 
 // Helper function to get events + counter from KV
 async function getEventsState(env) {
-	console.log('[KV] 📖 Reading events from MARVELING_EVENTS');
-	console.log('[KV] 🔍 env object keys:', Object.keys(env || {}));
-	console.log('[KV] 🔍 MARVELING_EVENTS binding:', env?.MARVELING_EVENTS ? 'EXISTS ✅' : 'MISSING ❌');
+	//console.log('[KV] 📖 Reading events from MARVELING_EVENTS');
+	//console.log('[KV] 🔍 env object keys:', Object.keys(env || {}));
+	//console.log('[KV] 🔍 MARVELING_EVENTS binding:', env?.MARVELING_EVENTS ? 'EXISTS ✅' : 'MISSING ❌');
 	
 	if (!env || !env.MARVELING_EVENTS) {
 	  console.error('[KV] ❌ MARVELING_EVENTS binding not found in env!');
@@ -76,9 +77,9 @@ async function getEventsState(env) {
 	}
 	
 	try {
-	  console.log('[KV] Calling env.MARVELING_EVENTS.get("events", "json")...');
+	  //console.log('[KV] Calling env.MARVELING_EVENTS.get("events", "json")...');
 	  const data = await env.MARVELING_EVENTS.get('events', 'json');
-	  console.log('[KV] Raw data from KV:', data);
+	  //console.log('[KV] Raw data from KV:', data);
 	  console.log('[KV] ✅ Retrieved data:', data ? `${Object.keys(data.events || {}).length} events, counter: ${data.counter}` : 'null/empty');
 	  
 	  if (!data) {
@@ -149,7 +150,7 @@ export default {
 };
 
   async function handleRequest(request, env, ctx) {
-  console.log(`[${new Date().toISOString()}] Incoming request: ${request.method} ${request.url}`);
+  //console.log(`[${new Date().toISOString()}] Incoming request: ${request.method} ${request.url}`);
   const url = new URL(request.url);
 
   // Health check endpoint
@@ -193,14 +194,14 @@ export default {
   }
 
   const body = await request.text();
-  console.log('Request headers:', Object.fromEntries(request.headers.entries()));
-  console.log('Request body:', body);
+  // console.log('Request headers:', Object.fromEntries(request.headers.entries()));
+  // console.log('Request body:', body);
   const signature = request.headers.get('X-Signature-Ed25519');
   const timestamp = request.headers.get('X-Signature-Timestamp');
 
   // Verify Discord request signature
   const isValidRequest = verifyDiscordSignature(signature, timestamp, body, PUBLIC_KEY);
-  console.log('Signature verification result:', isValidRequest);
+  //console.log('Signature verification result:', isValidRequest);
 
   if (!isValidRequest) {
     return new Response('Invalid request signature', { status: 401 });
@@ -209,7 +210,7 @@ export default {
   let interaction;
   try {
     interaction = JSON.parse(body);
-	console.log('Parsed interaction:', interaction);
+	// console.log('Parsed interaction:', interaction);
   } catch (err) {
     return new Response('Invalid JSON', { status: 400 });
   }
@@ -313,21 +314,21 @@ async function processCommand(interaction, env) {
 	const channelId = interaction.channel_id;
 	const roleId = env?.RIVALING_ROLE_ID;
   
-	console.log(`[COMMAND] ========================================`);
-	console.log(`[COMMAND] Processing: ${name} for user: ${userId} (${username})`);
-	console.log(`[COMMAND] 🔍 Environment check:`);
-	console.log(`[COMMAND] - env object:`, env ? 'EXISTS ✅' : 'MISSING ❌');
-	console.log(`[COMMAND] - env keys:`, Object.keys(env || {}));
-	console.log(`[COMMAND] - SUPABASE_URL:`, env?.SUPABASE_URL ? 'SET ✅' : 'MISSING ❌');
-	console.log(`[COMMAND] - SUPABASE_KEY:`, env?.SUPABASE_KEY ? 'SET ✅' : 'MISSING ❌');
-	console.log(`[COMMAND] - MARVELING_EVENTS:`, env?.MARVELING_EVENTS ? 'BOUND ✅' : 'MISSING ❌');
-	console.log(`[COMMAND] - RIVALING_ROLE_ID:`, env?.RIVALING_ROLE_ID || 'MISSING ❌');
-	console.log(`[COMMAND] ========================================`);
+	// console.log(`[COMMAND] ========================================`);
+	// console.log(`[COMMAND] Processing: ${name} for user: ${userId} (${username})`);
+	// console.log(`[COMMAND] 🔍 Environment check:`);
+	// console.log(`[COMMAND] - env object:`, env ? 'EXISTS ✅' : 'MISSING ❌');
+	// console.log(`[COMMAND] - env keys:`, Object.keys(env || {}));
+	// console.log(`[COMMAND] - SUPABASE_URL:`, env?.SUPABASE_URL ? 'SET ✅' : 'MISSING ❌');
+	// console.log(`[COMMAND] - SUPABASE_KEY:`, env?.SUPABASE_KEY ? 'SET ✅' : 'MISSING ❌');
+	// console.log(`[COMMAND] - MARVELING_EVENTS:`, env?.MARVELING_EVENTS ? 'BOUND ✅' : 'MISSING ❌');
+	// console.log(`[COMMAND] - RIVALING_ROLE_ID:`, env?.RIVALING_ROLE_ID || 'MISSING ❌');
+	// console.log(`[COMMAND] ========================================`);
 	
 	// Initialize Supabase client
 	const supabase = createSupabaseClient(env);
 	if (supabase) {
-		console.log('[COMMAND] ✅ Supabase client initialized');
+		// console.log('[COMMAND] ✅ Supabase client initialized');
 	} else {
 		console.log('[COMMAND] ⚠️ Supabase client not available - achievements disabled');
 	}
@@ -335,7 +336,7 @@ async function processCommand(interaction, env) {
 	try {
 	  // Get events from KV
 	  const events = await getAllEvents(env);
-	  console.log(`[COMMAND] Loaded ${Object.keys(events).length} events from KV`);
+	  //console.log(`[COMMAND] Loaded ${Object.keys(events).length} events from KV`);
 	  
 	  // Get next event ID
 	  const eventIds = Object.keys(events);
@@ -463,7 +464,7 @@ async function saveEvent(env, eventId, event) {
   }
 
 async function deleteEventFromKV(env, eventId) {
-	console.log(`[KV] 🗑️  Deleting event #${eventId}`);
+	//console.log(`[KV] 🗑️  Deleting event #${eventId}`);
 	try {
 	  const { events, counter } = await getEventsState(env);
 	  delete events[eventId];

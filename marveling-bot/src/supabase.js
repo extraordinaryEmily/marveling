@@ -10,12 +10,12 @@ export class SupabaseClient {
       'apikey': key,
       'Authorization': `Bearer ${key}`
     };
-    console.log('[SUPABASE] Client initialized with URL:', url);
+    // console.log('[SUPABASE] Client initialized with URL:', url);
   }
 
   async query(table, operation, data = null, filter = null) {
     const endpoint = `${this.url}/rest/v1/${table}`;
-    console.log(`[SUPABASE] Query: ${operation} on ${table}`, { data, filter });
+    //console.log(`[SUPABASE] Query: ${operation} on ${table}`, { data, filter });
     
     try {
       let url = endpoint;
@@ -57,10 +57,10 @@ export class SupabaseClient {
           break;
       }
 
-      console.log(`[SUPABASE] Fetch: ${options.method} ${url}`);
+      //console.log(`[SUPABASE] Fetch: ${options.method} ${url}`);
       const response = await fetch(url, options);
       const text = await response.text();
-      console.log(`[SUPABASE] Response: ${response.status}`, text.substring(0, 200));
+      //console.log(`[SUPABASE] Response: ${response.status}`, text.substring(0, 200));
       
       if (!response.ok) {
         console.error(`[SUPABASE] Error ${response.status}:`, text);
@@ -103,7 +103,7 @@ export class SupabaseClient {
   ========================================================================= */
 
   async getUserStatsFromSupabase(userId) {
-    console.log(`[SUPABASE] Getting stats for user ${userId}`);
+    //console.log(`[SUPABASE] Getting stats for user ${userId}`);
   
     try {
       // Query using your wrapper
@@ -118,7 +118,7 @@ export class SupabaseClient {
       const row = Array.isArray(result) ? result[0] : result;
   
       if (row) {
-        console.log(`[SUPABASE] Found stats:`, row);
+        //console.log(`[SUPABASE] Found stats:`, row);
   
         return {
           user_id: row.user_id,
@@ -346,10 +346,10 @@ export const supabaseHelpers = {
 
 
 export function createSupabaseClient(env) {
-  console.log('[SUPABASE] 🔍 Checking environment variables...');
-  console.log('[SUPABASE] env object keys:', Object.keys(env || {}));
-  console.log('[SUPABASE] SUPABASE_URL:', env?.SUPABASE_URL ? 'SET ✅' : 'MISSING ❌');
-  console.log('[SUPABASE] SUPABASE_KEY:', env?.SUPABASE_KEY ? 'SET ✅' : 'MISSING ❌');
+  // console.log('[SUPABASE] 🔍 Checking environment variables...');
+  // console.log('[SUPABASE] env object keys:', Object.keys(env || {}));
+  // console.log('[SUPABASE] SUPABASE_URL:', env?.SUPABASE_URL ? 'SET ✅' : 'MISSING ❌');
+  // console.log('[SUPABASE] SUPABASE_KEY:', env?.SUPABASE_KEY ? 'SET ✅' : 'MISSING ❌');
   
   if (!env || !env.SUPABASE_URL || !env.SUPABASE_KEY) {
     console.warn('[SUPABASE] ⚠️ Missing SUPABASE_URL or SUPABASE_KEY - Supabase disabled');
@@ -358,7 +358,7 @@ export function createSupabaseClient(env) {
     return null;
   }
   
-  console.log('[SUPABASE] ✅ Creating client with URL:', env.SUPABASE_URL);
+  // console.log('[SUPABASE] ✅ Creating client with URL:', env.SUPABASE_URL);
   return new SupabaseClient(env.SUPABASE_URL, env.SUPABASE_KEY);
 }
 
