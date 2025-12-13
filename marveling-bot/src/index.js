@@ -11,7 +11,7 @@ import {
   checkMoonKnight,
   checkWakandaStrategist,
   trackHostWithTimestamp
-} from './achievements.js';
+} from './achievementManager.js';
 
 // Discord public key from Developer Portal
 const PUBLIC_KEY = '45fb54cedef58867541476ba64135e875eb033978056d762991ee86b10176484';
@@ -294,17 +294,15 @@ async function handleCommand(interaction, env, ctx) {
 // For now, we'll use the handler functions directly
 // In production, you might want to create ES module versions or use a bundler
 
-import {
-  handleListCommand,
-  handleHelpCommand,
-  handleGuestsCommand,
-  handleInviteCommand,
-  handleDeleteCommand,
-  handlePlaynowCommand,
-  handlePlanCommand,
-  handleRescheduleCommand,
-  handleAchievementsCommand
-} from './commands.js';
+import { handleAchievementsCommand } from './commands/achievements.js';
+import { handleHelpCommand } from './commands/help.js';
+import { handleListCommand } from './commands/list.js';
+import { handleGuestsCommand } from './commands/guests.js';
+import { handleDeleteCommand } from './commands/delete.js';
+import { handleInviteCommand } from './commands/invite.js';
+import { handlePlanCommand } from './commands/plan.js';
+import { handlePlaynowCommand } from './commands/playnow.js';
+import { handleRescheduleCommand } from './commands/reschedule.js';
 
 async function processCommand(interaction, env) {
 	const name = interaction.data.name;
@@ -358,322 +356,64 @@ async function processCommand(interaction, env) {
 		  break;
 		}
 		case 'guests': {
-		  const eventId = interaction.data.options?.find(opt => opt.name === 'id')?.value?.replace('#', '');
-		  if (!eventId) {
-			result = { content: '❌ Event ID is required.', flags: 64 };
-		  } else {
-			result = handleGuestsCommand(events, eventId);
-		  }
+		  result = handleGuestsCommand(interaction, events);
 		  break;
 		}
 		case 'invite': {
-		  const eventId = interaction.data.options?.find(opt => opt.name === 'id')?.value?.replace('#', '');
-		  const personOption = interaction.data.options?.find(opt => opt.name === 'person');
-		  const guestOption = interaction.data.options?.find(opt => opt.name === 'guest');
-		  const personId = personOption?.value || (interaction.data.resolved?.users?.[personOption?.value]?.id);
-		  const guestString = guestOption?.value;
-		  
-		  console.log(`[COMMAND] Invite: eventId=${eventId}, personId=${personId}, guestString=${guestString}`);
-		  result = await handleInviteCommand(events, eventId, userId, username, personId, guestString);
-		  
-		  // Save updated event if needed
-		  if (result.needsSave && result.updatedEvent) {
-			console.log(`[COMMAND] Saving updated event after invite`);
-			await saveEvent(env, eventId, result.updatedEvent);
-			
-			// Track achievement for invite
-			if (personId) {
-			  console.log(`[COMMAND] Tracking invite achievement for ${userId}`);
-			  await trackInviteSent(supabase, userId);
-			}
-		  }
-		  
-		  // Use response from result
-		  result = result.response || result;
-		  break;
+			result = await handleInviteCommand(
+			  interaction,
+			  events,
+			  userId,
+			  username,
+			  env,
+			  supabase,
+			  saveEvent,
+			  trackInviteSent
+			);
+			break;
 		}
 		case 'delete': {
-		  const eventId = interaction.data.options?.find(opt => opt.name === 'id')?.value?.replace('#', '');
-		  console.log(`[COMMAND] Delete: eventId=${eventId}`);
-		  result = await handleDeleteCommand(events, eventId, userId);
-		  
-		  // Delete event if needed
-		  if (result.needsDelete) {
-			console.log(`[COMMAND] Deleting event #${result.eventId} from KV`);
-			await deleteEventFromKV(env, result.eventId);
-			
-			// Cancel reminder in Supabase
-			if (supabase) {
-			  console.log(`[COMMAND] Canceling reminder for event #${result.eventId}`);
-			  try {
-				await supabase.cancelReminder(result.eventId);
-			  } catch (error) {
-				console.error('[COMMAND] Failed to cancel reminder:', error);
-			  }
-			}
-		  }
-		  
-		  // Send follow-ups
-		  if (result.followUps && result.followUps.length > 0) {
-			for (const followUp of result.followUps) {
-			  await sendFollowUp(applicationId, token, followUp);
-			}
-		  }
-		  
-		  // Use response from result
-		  result = result.response || result;
-		  break;
+			result = await handleDeleteCommand(interaction, events, userId, env, supabase, sendFollowUp, applicationId, token, deleteEventFromKV);
+			break;
 		}
 		case 'playnow': {
-		  console.log(`[COMMAND] Playnow: userId=${userId}, nextEventId=${nextEventId}`);
-		  const cmdResult = handlePlaynowCommand(userId, username, roleId, nextEventId);
-		  
-		  // Save new event
-		  if (cmdResult.newEvent) {
-			console.log(`[COMMAND] Saving new playnow event #${cmdResult.newEvent.id}`);
-			await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
-			
-			// Track achievements
-			console.log(`[COMMAND] Tracking host achievements for ${userId}`);
-			const hostAchievements = await trackHostCreated(supabase, userId);
-			
-			// Check Moon Knight (midnight-4am PST)
-			const pstHour = parseInt(new Date().toLocaleString('en-US', { 
-			  timeZone: 'America/Los_Angeles', 
-			  hour: 'numeric', 
-			  hour12: false 
-			}));
-			console.log(`[COMMAND] Current PST hour: ${pstHour}`);
-			const moonKnightAchievements = await checkMoonKnight(supabase, userId, pstHour);
-			
-			// Track host timestamp
-			const timestampAchievements = await trackHostWithTimestamp(supabase, userId);
-			
-			// Combine all achievements
-			const allAchievements = [...hostAchievements, ...moonKnightAchievements, ...timestampAchievements];
-			
-			// Send achievement announcements
-			if (allAchievements.length > 0) {
-			  const achievementText = allAchievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-			  console.log(`[COMMAND] Sending achievement announcement:`, achievementText);
-			  await sendFollowUp(applicationId, token, { content: achievementText });
-			}
-		  }
-		  
-		  // Send follow-ups
-		  if (cmdResult.followUps && cmdResult.followUps.length > 0) {
-			for (const followUp of cmdResult.followUps) {
-			  await sendFollowUp(applicationId, token, followUp);
-			}
-		  }
-		  
-		  result = cmdResult.response;
-		  break;
+			// Call the command handler and await everything inside
+			result = await handlePlaynowCommand({
+			  userId,
+			  username,
+			  roleId,
+			  nextEventId,
+			  env,
+			  supabase,
+			  saveEvent
+			});
+			// Assign the main Discord response directly
+			result = result.response;
+			break;
 		}
 		case 'plan': {
-		  const time = interaction.data.options?.find(opt => opt.name === 'time')?.value;
-		  if (!time) {
-			result = { content: '❌ Time is required.', flags: 64 };
-		  } else {
-			console.log(`[COMMAND] Plan: userId=${userId}, time=${time}, nextEventId=${nextEventId}`);
-			
-			// TODO: Parse time string to get eventTimeIso and reminderTimeIso
-			// For now, pass null and compute later
-			const cmdResult = handlePlanCommand(userId, time, nextEventId, roleId, channelId, null, null);
-			
-			// Save new event
-		  if (cmdResult.newEvent) {
-			console.log(`[COMMAND] Saving new plan event #${cmdResult.newEvent.id}`);
-			await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
-			
-			// Track achievements
-			console.log(`[COMMAND] Tracking host achievements for ${userId}`);
-			const hostAchievements = await trackHostCreated(supabase, userId);
-			
-			// Check Moon Knight
-			const pstHour = parseInt(new Date().toLocaleString('en-US', { 
-			  timeZone: 'America/Los_Angeles', 
-			  hour: 'numeric', 
-			  hour12: false 
-			}));
-			const moonKnightAchievements = await checkMoonKnight(supabase, userId, pstHour);
-			
-			// Check Wakanda Strategist (3+ days in advance)
-			let strategistAchievements = [];
-			if (cmdResult.newEvent.eventTimeIso) {
-			  const eventTime = new Date(cmdResult.newEvent.eventTimeIso);
-			  const daysInAdvance = (eventTime - Date.now()) / (1000 * 60 * 60 * 24);
-			  console.log(`[COMMAND] Event planned ${daysInAdvance.toFixed(2)} days in advance`);
-			  strategistAchievements = await checkWakandaStrategist(supabase, userId, daysInAdvance);
-			}
-			
-			// Track host timestamp
-			const timestampAchievements = await trackHostWithTimestamp(supabase, userId);
-			
-			// Combine all achievements
-			const allAchievements = [...hostAchievements, ...moonKnightAchievements, ...strategistAchievements, ...timestampAchievements];
-			
-			// Send achievement announcements
-			if (allAchievements.length > 0) {
-			  const achievementText = allAchievements.map(a => `<@${userId}> unlocked ${a.emoji} **${a.name}**!`).join('\n');
-			  console.log(`[COMMAND] Sending achievement announcement:`, achievementText);
-			  await sendFollowUp(applicationId, token, { content: achievementText });
-			}
-			
-			// Schedule reminder if available
-			if (cmdResult.reminderData && supabase) {
-			  console.log(`[COMMAND] Scheduling reminder for event #${nextEventId}`);
-			  try {
-				await supabase.scheduleReminder(
-				  cmdResult.reminderData.eventId,
-				  cmdResult.reminderData.reminderTime,
-				  cmdResult.reminderData.channelId,
-				  cmdResult.reminderData.attendees
-				);
-			  } catch (error) {
-				console.error('[COMMAND] Failed to schedule reminder:', error);
-			  }
-			}
-		  }
-			
-			// Send follow-ups
-			if (cmdResult.followUps && cmdResult.followUps.length > 0) {
-			  for (const followUp of cmdResult.followUps) {
-				await sendFollowUp(applicationId, token, followUp);
-			  }
-			}
-			
-			result = cmdResult.response;
-		  }
-		  break;
+			result = await handlePlanCommand(
+			  interaction,
+			  userId,
+			  nextEventId,
+			  roleId,
+			  channelId,
+			  env,
+			  supabase,
+			  saveEvent,
+			  sendFollowUp,
+			  applicationId,
+			  token
+			);
+			break;
 		}
 		case 'reschedule': {
-		  const eventId = interaction.data.options?.find(opt => opt.name === 'id')?.value?.replace('#', '');
-		  const newTime = interaction.data.options?.find(opt => opt.name === 'time')?.value;
-		  
-		  console.log(`[COMMAND] Reschedule: eventId=${eventId}, newTime=${newTime}, nextEventId=${nextEventId}`);
-		  const cmdResult = handleRescheduleCommand(events, eventId, userId, newTime, nextEventId, roleId, channelId, null, null);
-		  
-		  // Delete old event and save new one
-		  if (cmdResult.needsDelete) {
-			console.log(`[COMMAND] Deleting old event #${cmdResult.oldEventId}`);
-			await deleteEventFromKV(env, cmdResult.oldEventId);
-			
-			// Cancel old reminder
-			if (supabase) {
-			  console.log(`[COMMAND] Canceling old reminder for event #${cmdResult.oldEventId}`);
-			  try {
-				await supabase.cancelReminder(cmdResult.oldEventId);
-			  } catch (error) {
-				console.error('[COMMAND] Failed to cancel old reminder:', error);
-			  }
-			}
-		  }
-		  
-		  if (cmdResult.newEvent) {
-			console.log(`[COMMAND] Saving new rescheduled event #${cmdResult.newEvent.id}`);
-			await saveEvent(env, cmdResult.newEvent.id.toString(), cmdResult.newEvent);
-			
-			// Schedule new reminder if available
-			if (cmdResult.reminderData && supabase) {
-			  console.log(`[COMMAND] Scheduling new reminder for event #${nextEventId}`);
-			  try {
-				await supabase.scheduleReminder(
-				  cmdResult.reminderData.eventId,
-				  cmdResult.reminderData.reminderTime,
-				  cmdResult.reminderData.channelId,
-				  cmdResult.reminderData.attendees
-				);
-			  } catch (error) {
-				console.error('[COMMAND] Failed to schedule new reminder:', error);
-			  }
-			}
-		  }
-		  
-		  // Send follow-ups
-		  if (cmdResult.followUps && cmdResult.followUps.length > 0) {
-			for (const followUp of cmdResult.followUps) {
-			  await sendFollowUp(applicationId, token, followUp);
-			}
-		  }
-		  
-		  result = cmdResult.response;
-		  break;
+			result = await handleRescheduleCommand(interaction, events, supabase, env);
+			break;
 		}
 		case 'achievements': {
-		  const userOption = interaction.data.options?.find(opt => opt.name === 'user');
-		  const targetUserId = userOption?.value || userId;
-		  const targetUser = interaction.data.resolved?.users?.[targetUserId] || interaction.member?.user || interaction.user;
-		  
-		  console.log(`[COMMAND] Fetching achievements for user ${targetUserId}`);
-		  
-		  // Fetch actual stats from Supabase
-		  let stats = { hostsCreated: 0, invitesSent: 0, rsvpsMade: 0 };
-		  let ranks = { host: {}, recruiter: {}, responder: {} };
-		  let legendaryAchievements = [];
-		  
-		  if (supabase) {
-			try {
-			  const userStats = await supabase.getUserStatsFromSupabase(targetUserId);
-			  console.log(`[COMMAND] Fetched stats from Supabase:`, userStats);
-			  
-			  stats = {
-				hostsCreated: userStats.hosts_created || 0,
-				invitesSent: userStats.invites_sent || 0,
-				rsvpsMade: userStats.rsvps_made || 0
-			  };
-			  
-			  // Calculate ranks from the ACHIEVEMENT_TIERS
-			  const { ACHIEVEMENT_TIERS } = await import('./achievements.js');
-			  const { LEGENDARY_ACHIEVEMENTS } = await import('./achievements.js');
-			  
-			  const getHighestRank = (tiers, count) => {
-				let currentRank = null;
-				let nextRank = tiers[0];
-				
-				for (let i = 0; i < tiers.length; i++) {
-				  if (count >= tiers[i].count) {
-					currentRank = tiers[i];
-					nextRank = tiers[i + 1] || null;
-				  } else {
-					break;
-				  }
-				}
-				
-				return { current: currentRank, next: nextRank, progress: count };
-			  };
-			  
-			  ranks = {
-				host: getHighestRank(ACHIEVEMENT_TIERS.HOST, stats.hostsCreated),
-				recruiter: getHighestRank(ACHIEVEMENT_TIERS.RECRUITER, stats.invitesSent),
-				responder: getHighestRank(ACHIEVEMENT_TIERS.RESPONDER, stats.rsvpsMade)
-			  };
-			  
-			  console.log(`[COMMAND] Calculated ranks:`, ranks);
-			  
-			  // ===== Build legendary achievements directly here =====
-			  legendaryAchievements = Object.values(LEGENDARY_ACHIEVEMENTS).filter(a =>
-				Array.isArray(userStats.achievements) && userStats.achievements.includes(a.id)
-			  );
-		
-			  console.log(`[COMMAND] Legendary achievements:`, legendaryAchievements);
-
-			} catch (error) {
-			  console.error('[COMMAND] Error fetching achievements from Supabase:', error);
-			}
-		  }
-		  
-		  const cmdResult = handleAchievementsCommand(
-			targetUserId,
-			targetUser.username || targetUser.global_name,
-			targetUser.avatar,
-			stats,
-			ranks,
-			legendaryAchievements
-		  );
-		  
-		  result = cmdResult.response;
-		  break;
+			result = await handleAchievementsCommand(interaction, supabase);
+			break;
 		}
 		default:
 		  result = { content: `❌ Unknown command: ${name}`, flags: 64 };
