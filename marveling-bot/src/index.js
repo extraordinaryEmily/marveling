@@ -630,7 +630,7 @@ async function handleButton(interaction, env) {
         console.log(`[BUTTON] Removing ${userId} from event #${eventId}`);
         event.attendees = event.attendees.filter(u => u !== userId);
         event.maybe = event.maybe.filter(u => u !== userId);
-        message = `⛔ You won't be attending event #${eventId}`;
+        message = `👎 You won't be attending event #${eventId}`;
         break;
         
       case 'reschedule':
@@ -660,7 +660,7 @@ async function handleButton(interaction, env) {
   return jsonResponse({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {
-      content: '✅ Button pressed',
+      content: '👍 Button pressed',
       flags: MessageFlags.EPHEMERAL,
     },
   });

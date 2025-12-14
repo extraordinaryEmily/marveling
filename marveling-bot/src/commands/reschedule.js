@@ -56,15 +56,15 @@ export async function handleRescheduleCommand(interaction, events, supabase, env
         title: '🔁 Marvel Rivals Game Night (Rescheduled)',
         fields: [
           { name: 'Event ID', value: `#${nextEventId}` },
-          { name: 'RSVP', value: "✅ Available | 🤔 Maybe | ⛔ Can't make it | 🔁 Reschedule" }
+          { name: 'RSVP', value: "👍 Available | 🤔 Maybe | 👎 Can't make it | 🔁 Reschedule" }
         ]
       }],
       components: [{
         type: 1,
         components: [
-          { type: 2, style: 3, label: 'Available', emoji: { name: '✅' }, custom_id: `rsvp_yes_${nextEventId}` },
+          { type: 2, style: 3, label: 'Available', emoji: { name: '👍' }, custom_id: `rsvp_yes_${nextEventId}` },
           { type: 2, style: 2, label: 'Maybe', emoji: { name: '🤔' }, custom_id: `rsvp_maybe_${nextEventId}` },
-          { type: 2, style: 4, label: "Can't make it", emoji: { name: '⛔' }, custom_id: `rsvp_no_${nextEventId}` },
+          { type: 2, style: 4, label: "Can't make it", emoji: { name: '👎' }, custom_id: `rsvp_no_${nextEventId}` },
           { type: 2, style: 1, label: 'Reschedule', emoji: { name: '🔁' }, custom_id: `rsvp_reschedule_${nextEventId}` }
         ]
       }],

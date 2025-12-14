@@ -4,25 +4,28 @@ https://marveling-bot.marveling.workers.dev/interactions
 ## Bugs, Features & Enhancements
 | ITEM | DETAILS | STATUS | PRIORITY |
 | ----------- | ----------- | ----------- | ----------- |
-| Cron for Supabase wake | Next time it sleeps, I have to pay to wake. | PROD | **P1** |
-| index.js & command.js mess | Divide all the commands into their own files and repurpose utils | DEV | **P1** |
 | Ephemeral mechanism | Defer messages override behavior. Code too tightly coupled | OPEN | **P1** |
-| Achievements not stored | Supabase communication is not established for `achievements`, `recent_host_timestamps` and other items in the table. | OPEN | **P1** |
-| Achievements not happening | Looks like legendary achievements aren't happening | OPEN | **P2** |
-| Lost achievement notifs | Certain achievements aren't showing their notification | OPEN | **P2** |
-| Color button conflict | Red buttons' emojis are too close in color | OPEN | **P3** |
+| Old events alive | Past events still exist and should be automatically deleted instead of hidden so that /invite and /guests can't touch them | OPEN | **P1** |
+| Table broken | Certain items on Supabase table don't get tracked. | OPEN | **P1** |
+| Lost achievement notifs | Certain achievements aren't showing their notification | OPEN | **P1** |
+| Achievements testing | Looks like some legendary achievements aren't working so testing is required. | OPEN | **P2** |
 | @rivaling invites all | /guests doesn't show everyone invited in @rivaling or tag @rivaling | OPEN | **P3** |
-|  |  | OPEN | **P1** |
+
 
 
 # Checklist
 - [ ] Ephemeral mechanism ⚠️
+- [ ] Clean up orphaned reminders
+- [ ] Clean up old events ⚠️
+- [ ] Check if reminders sent
+- [ ] Mark reminders sent
 - [ ] Achievement
     - [x] Achievement granting
-    - [ ] Achievement announcements
+    - [ ] Achievement announcements ⚠️
     - [x] /achievements for self
     - [x] /achievements for others
     - [x] Legendary achievements
+    - [ ] Process Event Nonresponders
 - [ ] Delete
     - [x] Non owner deletion message
     - [x] Delete old/current events
@@ -37,7 +40,6 @@ https://marveling-bot.marveling.workers.dev/interactions
     - [x] Max 5 externals
     - [x] Invite within server
     - [x] Invites tracked
-    - [ ] Block old events invite
 - [ ] List
     - [x] Hide expired Play Now events
     - [ ] Hide expired Plan events

@@ -21,14 +21,14 @@ export async function handlePlaynowCommand({
       image: { url: 'https://i.imgur.com/pMPmPef.gif' },
       fields: [
         { name: 'Event ID', value: `#${nextEventId}` },
-        { name: 'RSVP', value: "✅ I'm coming! | ⛔ Can't make it" }
+        { name: 'RSVP', value: "👍 I'm coming! | 👎 Can't make it" }
       ]
     }],
     components: [{
       type: 1,
       components: [
-        { type: 2, style: 3, label: "I'm coming!", emoji: { name: '✅' }, custom_id: `rsvp_yes_${nextEventId}` },
-        { type: 2, style: 4, label: "Can't make it", emoji: { name: '⛔' }, custom_id: `rsvp_no_${nextEventId}` }
+        { type: 2, style: 3, label: "I'm coming!", emoji: { name: '👍' }, custom_id: `rsvp_yes_${nextEventId}` },
+        { type: 2, style: 4, label: "Can't make it", emoji: { name: '👎' }, custom_id: `rsvp_no_${nextEventId}` }
       ]
     }],
     flags: 0
